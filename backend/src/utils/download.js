@@ -395,6 +395,7 @@ export default async function download(
                     undefined,
                     proxy,
                     $arguments.flowUrl,
+                    $arguments.flowHeaders,
                 ),
             ),
         );

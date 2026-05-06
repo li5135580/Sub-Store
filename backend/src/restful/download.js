@@ -280,6 +280,7 @@ async function downloadSubscription(req, res) {
                             undefined,
                             proxy || sub.proxy,
                             $arguments.flowUrl,
+                            $arguments.flowHeaders,
                         );
                         if (flowInfo) {
                             const headers = normalizeFlowHeader(flowInfo, true);
@@ -569,6 +570,7 @@ async function downloadCollection(req, res) {
                                     undefined,
                                     proxy || sub.proxy || collection.proxy,
                                     $arguments.flowUrl,
+                                    $arguments.flowHeaders,
                                 );
                             }
                         } catch (err) {

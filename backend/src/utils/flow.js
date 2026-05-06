@@ -31,6 +31,7 @@ export async function getFlowHeaders(
     timeout,
     customProxy,
     flowUrl,
+    flowHeaders,
 ) {
     let url = flowUrl || rawUrl || '';
     let $arguments = {};
@@ -69,11 +70,48 @@ export async function getFlowHeaders(
     }
     const userAgent = ua || defaultFlowUserAgent || 'clash.meta/v1.19.23';
     const requestTimeout = timeout || defaultTimeout || 8000;
-    const id = hex_md5(userAgent + url);
+    let customHeaders;
+    const customHeadersArg =
+        flowHeaders || $arguments?.flowHeaders || $arguments?.headers;
+    if (customHeadersArg) {
+        try {
+            const parsed =
+                typeof customHeadersArg === 'string'
+                    ? JSON.parse(customHeadersArg)
+                    : customHeadersArg;
+            if (
+                parsed &&
+                typeof parsed === 'object' &&
+                !Array.isArray(parsed) &&
+                Object.keys(parsed).length > 0
+            ) {
+                const lowerCaseHeaders = { 'user-agent': userAgent };
+                for (const key in parsed) {
+                    lowerCaseHeaders[key.toLowerCase()] = parsed[key];
+                }
+                customHeaders = lowerCaseHeaders;
+            }
+        } catch (e) {
+            $.error(
+                `解析自定义 ${
+                    flowHeaders || $arguments?.flowHeaders
+                        ? 'flowHeaders'
+                        : 'headers'
+                } 失败: ${e}`,
+            );
+        }
+    }
+    const id = hex_md5(
+        `${customHeaders ? JSON.stringify(customHeaders) : userAgent}${url}`,
+    );
     const cached = headersResourceCache.get(id);
     let flowInfo;
     if (!$arguments?.noCache && cached) {
-        $.info(`使用缓存的流量信息: ${url}, ${userAgent}`);
+        $.info(
+            `使用缓存的流量信息: ${url}, ${
+                customHeaders ? JSON.stringify(customHeaders) : userAgent
+            }`,
+        );
         flowInfo = cached;
     } else {
         const http = HTTP();
@@ -81,13 +119,15 @@ export async function getFlowHeaders(
             let flowUrlHeaders;
             try {
                 $.info(
-                    `使用 GET 方法从响应体获取流量信息: ${flowUrl}, User-Agent: ${
-                        userAgent || ''
+                    `使用 GET 方法从响应体获取流量信息: ${flowUrl}, ${
+                        customHeaders
+                            ? JSON.stringify(customHeaders)
+                            : `User-Agent: ${userAgent || ''}`
                     }, Insecure: ${!!insecure}, Proxy: ${proxy}`,
                 );
                 const { headers, body, statusCode } = await http.get({
-                    url: flowUrl,
-                    headers: {
+                    url,
+                    headers: customHeaders || {
                         'User-Agent': userAgent,
                     },
                     timeout: requestTimeout,
@@ -113,8 +153,10 @@ export async function getFlowHeaders(
                 }
             } catch (e) {
                 $.error(
-                    `使用 GET 方法从响应体获取流量信息失败: ${flowUrl}, User-Agent: ${
-                        userAgent || ''
+                    `使用 GET 方法从响应体获取流量信息失败: ${flowUrl}, ${
+                        customHeaders
+                            ? JSON.stringify(customHeaders)
+                            : `User-Agent: ${userAgent || ''}`
                     }, Insecure: ${!!insecure}, Proxy: ${proxy}: ${
                         e.message ?? e
                     }`,
@@ -129,8 +171,10 @@ export async function getFlowHeaders(
                             Number.isFinite(parsed?.usage?.upload)
                         ) {
                             $.info(
-                                `使用 GET 方法从响应头获取流量信息成功: ${flowUrl}, User-Agent: ${
-                                    userAgent || ''
+                                `使用 GET 方法从响应头获取流量信息成功: ${flowUrl}, ${
+                                    customHeaders
+                                        ? JSON.stringify(customHeaders)
+                                        : `User-Agent: ${userAgent || ''}`
                                 }, Insecure: ${!!insecure}, Proxy: ${proxy}`,
                             );
                             flowInfo = flowField;
@@ -139,8 +183,10 @@ export async function getFlowHeaders(
                         }
                     } catch (e) {
                         $.error(
-                            `使用 GET 方法从响应头获取流量信息失败: ${flowUrl}, User-Agent: ${
-                                userAgent || ''
+                            `使用 GET 方法从响应头获取流量信息失败: ${flowUrl}, ${
+                                customHeaders
+                                    ? JSON.stringify(customHeaders)
+                                    : `User-Agent: ${userAgent || ''}`
                             }, Insecure: ${!!insecure}, Proxy: ${proxy}: ${
                                 e.message ?? e
                             }`,
@@ -151,8 +197,10 @@ export async function getFlowHeaders(
         } else {
             try {
                 $.info(
-                    `使用 HEAD 方法从响应头获取流量信息: ${url}, User-Agent: ${
-                        userAgent || ''
+                    `使用 HEAD 方法从响应头获取流量信息: ${url}, ${
+                        customHeaders
+                            ? JSON.stringify(customHeaders)
+                            : `User-Agent: ${userAgent || ''}`
                     }, Insecure: ${!!insecure}, Proxy: ${proxy}`,
                 );
                 const { headers } = await http.head({
@@ -161,7 +209,7 @@ export async function getFlowHeaders(
                         .map((i) => i.trim())
                         .filter((i) => i.length)[0],
                     headers: {
-                        'User-Agent': userAgent,
+                        ...(customHeaders || { 'User-Agent': userAgent }),
                         ...(isStash && proxy
                             ? {
                                   'X-Stash-Selected-Proxy':
@@ -182,8 +230,10 @@ export async function getFlowHeaders(
                 flowInfo = getFlowField(headers);
             } catch (e) {
                 $.error(
-                    `使用 HEAD 方法从响应头获取流量信息失败: ${url}, User-Agent: ${
-                        userAgent || ''
+                    `使用 HEAD 方法从响应头获取流量信息失败: ${url}, ${
+                        customHeaders
+                            ? JSON.stringify(customHeaders)
+                            : `User-Agent: ${userAgent || ''}`
                     }, Insecure: ${!!insecure}, Proxy: ${proxy}: ${
                         e.message ?? e
                     }`,
@@ -191,8 +241,10 @@ export async function getFlowHeaders(
             }
             if (!flowInfo) {
                 $.info(
-                    `使用 GET 方法获取流量信息: ${url}, User-Agent: ${
-                        userAgent || ''
+                    `使用 GET 方法获取流量信息: ${url}, ${
+                        customHeaders
+                            ? JSON.stringify(customHeaders)
+                            : `User-Agent: ${userAgent || ''}`
                     }, Insecure: ${!!insecure}, Proxy: ${proxy}`,
                 );
                 const { headers } = await http.get({
@@ -201,7 +253,7 @@ export async function getFlowHeaders(
                         .map((i) => i.trim())
                         .filter((i) => i.length)[0],
                     headers: {
-                        'User-Agent': userAgent,
+                        ...(customHeaders || { 'User-Agent': userAgent }),
                         ...(isStash && proxy
                             ? {
                                   'X-Stash-Selected-Proxy':
