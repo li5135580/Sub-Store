@@ -41,12 +41,6 @@ export default function Shadowrocket_Producer() {
                 ) {
                     return false;
                 } else if (
-                    proxy.encryption &&
-                    proxy.encryption !== 'none' &&
-                    ['vless'].includes(proxy.type)
-                ) {
-                    return false;
-                } else if (
                     ['anytls'].includes(proxy.type) &&
                     proxy.network &&
                     (!['tcp'].includes(proxy.network) ||
