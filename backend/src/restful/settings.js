@@ -2,8 +2,30 @@ import { SETTINGS_KEY, ARTIFACT_REPOSITORY_KEY } from '@/constants';
 import { success, failed } from './response';
 import { InternalServerError } from '@/restful/errors';
 import $ from '@/core/app';
-import Gist from '@/utils/gist';
+import Gist, { getGithubGistBaseURL } from '@/utils/gist';
 import { clearLogSettingsCache } from '@/utils/debug-logs';
+
+const ARTIFACT_STORE_SETTING_KEYS = [
+    'gistToken',
+    'githubProxy',
+    'githubApiUrl',
+    'defaultProxy',
+];
+
+export function shouldRefreshArtifactStoreForSettingsPatch(body = {}) {
+    return ARTIFACT_STORE_SETTING_KEYS.some((key) =>
+        Object.prototype.hasOwnProperty.call(body, key),
+    );
+}
+
+export function getGithubAvatarApiUrl({ username, githubApiUrl, githubProxy }) {
+    const githubApiBaseURL = getGithubGistBaseURL({
+        githubApiUrl,
+        githubProxy,
+    });
+
+    return `${githubApiBaseURL}/users/${encodeURIComponent(username)}`;
+}
 
 export default function register($app) {
     const settings = $.read(SETTINGS_KEY);
@@ -19,7 +41,7 @@ async function getSettings(req, res) {
             $.write(settings, SETTINGS_KEY);
         }
 
-        if (!settings.avatarUrl) await updateAvatar();
+        // await updateAvatar();
         if (!settings.artifactStore) await updateArtifactStore();
 
         success(res, settings);
@@ -70,13 +92,8 @@ async function updateSettings(req, res) {
         }
         $.write(newSettings, SETTINGS_KEY);
         clearLogSettingsCache();
-        if (
-            req.body.githubUser ||
-            req.body.gistToken ||
-            req.body.githubProxy ||
-            req.body.defaultProxy
-        ) {
-            await updateAvatar();
+        if (shouldRefreshArtifactStoreForSettingsPatch(req.body)) {
+            // await updateAvatar();
             await updateArtifactStore();
         }
         success(res, newSettings);
@@ -95,7 +112,12 @@ async function updateSettings(req, res) {
 
 export async function updateAvatar() {
     const settings = $.read(SETTINGS_KEY);
-    const { githubUser: username, syncPlatform, githubProxy } = settings;
+    const {
+        githubUser: username,
+        syncPlatform,
+        githubProxy,
+        githubApiUrl,
+    } = settings;
     if (username) {
         if (syncPlatform === 'gitlab') {
             try {
@@ -126,11 +148,11 @@ export async function updateAvatar() {
             try {
                 const data = await $.http
                     .get({
-                        url: `${
-                            githubProxy ? `${githubProxy}/` : ''
-                        }https://api.github.com/users/${encodeURIComponent(
+                        url: getGithubAvatarApiUrl({
                             username,
-                        )}`,
+                            githubApiUrl,
+                            githubProxy,
+                        }),
                         headers: {
                             'User-Agent':
                                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.141 Safari/537.36',

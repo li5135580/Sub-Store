@@ -3,6 +3,31 @@ import { getPolicyDescriptor } from '@/utils';
 import $ from '@/core/app';
 import { SETTINGS_KEY } from '@/constants';
 
+const DEFAULT_GITHUB_API_URL = 'https://api.github.com';
+
+function normalizeApiUrl(url, fallback = DEFAULT_GITHUB_API_URL) {
+    const normalizedUrl = String(url ?? '').trim() || fallback;
+
+    return normalizedUrl.replace(/\/+$/, '');
+}
+
+export function getGithubGistBaseURL({ githubApiUrl, githubProxy } = {}) {
+    const normalizedGithubApiUrl = normalizeApiUrl(githubApiUrl);
+    const isCustomGithubApiUrl =
+        normalizedGithubApiUrl !== DEFAULT_GITHUB_API_URL;
+    const normalizedGithubProxy = String(githubProxy || '')
+        .trim()
+        .replace(/\/+$/, '');
+
+    if (isCustomGithubApiUrl) {
+        return normalizedGithubApiUrl;
+    }
+
+    return `${
+        normalizedGithubProxy ? `${normalizedGithubProxy}/` : ''
+    }${DEFAULT_GITHUB_API_URL}`;
+}
+
 /**
  * Gist backup
  */
@@ -13,7 +38,12 @@ export default class Gist {
             defaultProxy,
             defaultTimeout: timeout,
             githubProxy,
+            githubApiUrl,
         } = $.read(SETTINGS_KEY);
+        const githubGistBaseURL = getGithubGistBaseURL({
+            githubApiUrl,
+            githubProxy,
+        });
         let proxy = defaultProxy;
         if ($.env.isNode) {
             proxy =
@@ -50,9 +80,19 @@ export default class Gist {
                 events: {
                     onResponse: (resp) => {
                         if (/^[45]/.test(String(resp.statusCode))) {
-                            const body = JSON.parse(resp.body);
+                            let body;
+                            try {
+                                body = JSON.parse(resp.body);
+                            } catch (e) {
+                                //
+                            }
                             return Promise.reject(
-                                `ERROR: ${body.message?.error ?? body.message}`,
+                                `ERROR: ${
+                                    body?.message?.error ??
+                                    body?.error ??
+                                    body?.message ??
+                                    resp.body
+                                }`,
                             );
                         } else {
                             return resp;
@@ -67,9 +107,7 @@ export default class Gist {
                     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.141 Safari/537.36',
             };
             this.http = HTTP({
-                baseURL: `${
-                    githubProxy ? `${githubProxy}/` : ''
-                }https://api.github.com`,
+                baseURL: githubGistBaseURL,
                 headers: {
                     ...this.headers,
                     ...(isStash && proxy
@@ -92,8 +130,19 @@ export default class Gist {
                 events: {
                     onResponse: (resp) => {
                         if (/^[45]/.test(String(resp.statusCode))) {
+                            let body;
+                            try {
+                                body = JSON.parse(resp.body);
+                            } catch (e) {
+                                //
+                            }
                             return Promise.reject(
-                                `ERROR: ${JSON.parse(resp.body).message}`,
+                                `ERROR: ${
+                                    body?.message?.error ??
+                                    body?.error ??
+                                    body?.message ??
+                                    resp.body
+                                }`,
                             );
                         } else {
                             return resp;

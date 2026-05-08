@@ -9,6 +9,7 @@ import $ from '@/core/app';
 import { produceArtifact } from '@/restful/sync';
 import { syncToGist } from '@/restful/artifacts';
 import { findByName } from '@/utils/database';
+import { hasCronArtifactSyncCredentials } from '@/products/cron-sync-artifacts-eligibility';
 
 !(async function () {
     let arg;
@@ -36,7 +37,7 @@ import { findByName } from '@/utils/database';
     } else {
         const settings = $.read(SETTINGS_KEY);
         // if GitHub token is not configured
-        if (!settings.githubUser || !settings.gistToken) return;
+        if (!hasCronArtifactSyncCredentials(settings)) return;
 
         const artifacts = $.read(ARTIFACTS_KEY);
         if (!artifacts || artifacts.length === 0) return;
