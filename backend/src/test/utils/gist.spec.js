@@ -1,7 +1,10 @@
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
-import { getGithubGistBaseURL } from '@/utils/gist';
+import $ from '@/core/app';
+import { SETTINGS_KEY } from '@/constants';
+import Gist, { getGithubGistBaseURL } from '@/utils/gist';
+import { syncToGist } from '@/restful/artifacts';
 
 describe('Gist GitHub API URL', function () {
     it('uses the default GitHub API URL when unset', function () {
@@ -31,5 +34,164 @@ describe('Gist GitHub API URL', function () {
                 githubProxy: 'https://proxy.example.com/',
             }),
         ).to.equal('https://litegist.example.com/api');
+    });
+
+    it('keeps an existing Gist alive with a fallback file when a delete would empty it', async function () {
+        const manager = Object.create(Gist.prototype);
+        let patchBody;
+
+        manager.syncPlatform = '';
+        manager.locate = async () => ({
+            id: 'gist-id',
+            files: {
+                artifact: {
+                    filename: 'artifact',
+                },
+            },
+        });
+        manager.http = {
+            patch: async ({ body }) => {
+                patchBody = JSON.parse(body);
+                return {
+                    body: JSON.stringify({
+                        files: {
+                            '.sub-store-placeholder': {
+                                filename: '.sub-store-placeholder',
+                            },
+                        },
+                    }),
+                };
+            },
+        };
+
+        const response = await manager.upload(
+            {
+                artifact: {
+                    content: '',
+                },
+            },
+            {
+                emptyFileFallback: {
+                    filename: '.sub-store-placeholder',
+                    content: 'placeholder',
+                },
+            },
+        );
+
+        expect(patchBody.files.artifact).to.equal(null);
+        expect(patchBody.files['.sub-store-placeholder']).to.deep.equal({
+            content: 'placeholder',
+        });
+        expect(response.subStoreUploadMeta.emptyFileFallback).to.deep.equal({
+            status: 'created',
+            filename: '.sub-store-placeholder',
+        });
+    });
+
+    it('removes the fallback file when a real file is uploaded later', async function () {
+        const manager = Object.create(Gist.prototype);
+        let patchBody;
+
+        manager.syncPlatform = '';
+        manager.locate = async () => ({
+            id: 'gist-id',
+            files: {
+                '.sub-store-placeholder': {
+                    filename: '.sub-store-placeholder',
+                },
+            },
+        });
+        manager.http = {
+            patch: async ({ body }) => {
+                patchBody = JSON.parse(body);
+                return {
+                    body: JSON.stringify({
+                        files: {
+                            artifact: {
+                                filename: 'artifact',
+                            },
+                        },
+                    }),
+                };
+            },
+        };
+
+        const response = await manager.upload(
+            {
+                artifact: {
+                    content: 'real content',
+                },
+            },
+            {
+                emptyFileFallback: {
+                    filename: '.sub-store-placeholder',
+                    content: 'placeholder',
+                },
+            },
+        );
+
+        expect(patchBody.files.artifact).to.deep.equal({
+            content: 'real content',
+        });
+        expect(patchBody.files['.sub-store-placeholder']).to.equal(null);
+        expect(response.subStoreUploadMeta.emptyFileFallback).to.deep.equal({
+            status: 'removed',
+            filename: '.sub-store-placeholder',
+        });
+    });
+
+    it('passes the artifact placeholder fallback to syncToGist by default', async function () {
+        const originalRead = $.read.bind($);
+        const originalWrite = $.write.bind($);
+        const originalUpload = Gist.prototype.upload;
+        let capturedOptions;
+        let writtenSettings;
+
+        $.read = (key) => {
+            if (key === SETTINGS_KEY) {
+                return {
+                    gistToken: 'token',
+                };
+            }
+            return originalRead(key);
+        };
+        $.write = (data, key) => {
+            if (key === SETTINGS_KEY) {
+                writtenSettings = data;
+                return true;
+            }
+            return originalWrite(data, key);
+        };
+        Gist.prototype.upload = async function (_, options) {
+            capturedOptions = options;
+            return {
+                body: JSON.stringify({
+                    html_url: 'https://gist.example.com/sub-store',
+                    files: {},
+                }),
+            };
+        };
+
+        try {
+            await syncToGist({
+                artifact: {
+                    content: 'real content',
+                },
+            });
+        } finally {
+            $.read = originalRead;
+            $.write = originalWrite;
+            Gist.prototype.upload = originalUpload;
+        }
+
+        expect(capturedOptions.emptyFileFallback).to.deep.equal({
+            filename: '.sub-store-placeholder',
+            content:
+                'Sub-Store placeholder\nThis file keeps the Gist alive when all sync configuration files are deleted.',
+        });
+        expect(writtenSettings.artifactStore).to.equal(
+            'https://gist.example.com/sub-store',
+        );
+        expect(writtenSettings.artifactStoreStatus).to.equal('VALID');
     });
 });

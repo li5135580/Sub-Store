@@ -184,7 +184,7 @@ export default class Gist {
         }
     }
 
-    async upload(input) {
+    async upload(input, options = {}) {
         if (Object.keys(input).length === 0) {
             return Promise.reject('未提供需上传的文件');
         }
@@ -192,6 +192,65 @@ export default class Gist {
         const gist = await this.locate();
 
         let files = input;
+        const emptyFileFallback = options.emptyFileFallback;
+        const hasEmptyFileFallback = Boolean(emptyFileFallback?.filename);
+        const uploadMeta = {};
+
+        const attachUploadMeta = (request) =>
+            request.then((response) => {
+                if (Object.keys(uploadMeta).length > 0) {
+                    response.subStoreUploadMeta = uploadMeta;
+                }
+                return response;
+            });
+
+        const applyEmptyFileFallback = ({ actions, existingFiles, result }) => {
+            if (!hasEmptyFileFallback) return;
+
+            const filename = emptyFileFallback.filename;
+            const content = emptyFileFallback.content ?? '';
+            const realFileKeys = Object.keys(result).filter(
+                (key) => key !== filename,
+            );
+
+            if (Object.keys(result).length === 0) {
+                result[filename] = { content };
+                uploadMeta.emptyFileFallback = {
+                    status: 'created',
+                    filename,
+                };
+
+                if (this.syncPlatform === 'gitlab') {
+                    actions.push({
+                        action: existingFiles[filename] ? 'update' : 'create',
+                        file_path: filename,
+                        content,
+                    });
+                } else {
+                    files[filename] = { content };
+                }
+            } else if (result[filename] && realFileKeys.length > 0) {
+                delete result[filename];
+                uploadMeta.emptyFileFallback = {
+                    status: 'removed',
+                    filename,
+                };
+
+                if (this.syncPlatform === 'gitlab') {
+                    actions.push({
+                        action: 'delete',
+                        file_path: filename,
+                    });
+                } else {
+                    files[filename] = null;
+                }
+            } else if (result[filename] && realFileKeys.length === 0) {
+                uploadMeta.emptyFileFallback = {
+                    status: 'retained',
+                    filename,
+                };
+            }
+        };
 
         if (gist?.id) {
             if (this.syncPlatform === 'gitlab') {
@@ -211,6 +270,7 @@ export default class Gist {
                         files[key].content === ''
                     ) {
                         delete result[key];
+                        files[key] = null;
                         actions.push({
                             action: 'delete',
                             file_path: key,
@@ -244,6 +304,12 @@ export default class Gist {
             // console.log(`files`, files);
             // console.log(`actions`, actions);
 
+            applyEmptyFileFallback({
+                actions,
+                existingFiles: gist.files,
+                result,
+            });
+
             if (this.syncPlatform === 'gitlab') {
                 if (Object.keys(result).length === 0) {
                     return Promise.reject(
@@ -256,24 +322,28 @@ export default class Gist {
                     );
                 }
                 files = actions;
-                return this.http.put({
-                    headers: {
-                        ...this.headers,
-                        'Content-Type': 'application/json',
-                    },
-                    url: `/snippets/${gist.id}`,
-                    body: JSON.stringify({ files }),
-                });
+                return attachUploadMeta(
+                    this.http.put({
+                        headers: {
+                            ...this.headers,
+                            'Content-Type': 'application/json',
+                        },
+                        url: `/snippets/${gist.id}`,
+                        body: JSON.stringify({ files }),
+                    }),
+                );
             } else {
                 if (Object.keys(result).length === 0) {
                     return Promise.reject(
                         '本次操作将导致所有文件的内容都为空, 无法更新 gist',
                     );
                 }
-                return this.http.patch({
-                    url: `/gists/${gist.id}`,
-                    body: JSON.stringify({ files }),
-                });
+                return attachUploadMeta(
+                    this.http.patch({
+                        url: `/gists/${gist.id}`,
+                        body: JSON.stringify({ files }),
+                    }),
+                );
             }
         } else {
             files = Object.entries(files).reduce((acc, [key, file]) => {
@@ -292,32 +362,36 @@ export default class Gist {
                     file_path: key,
                     content: files[key].content,
                 }));
-                return this.http.post({
-                    headers: {
-                        ...this.headers,
-                        'Content-Type': 'application/json',
-                    },
-                    url: '/snippets',
-                    body: JSON.stringify({
-                        title: this.key,
-                        visibility: 'private',
-                        files,
+                return attachUploadMeta(
+                    this.http.post({
+                        headers: {
+                            ...this.headers,
+                            'Content-Type': 'application/json',
+                        },
+                        url: '/snippets',
+                        body: JSON.stringify({
+                            title: this.key,
+                            visibility: 'private',
+                            files,
+                        }),
                     }),
-                });
+                );
             } else {
                 if (Object.keys(files).length === 0) {
                     return Promise.reject(
                         '所有文件的内容都为空, 无法创建 gist',
                     );
                 }
-                return this.http.post({
-                    url: '/gists',
-                    body: JSON.stringify({
-                        description: this.key,
-                        public: false,
-                        files,
+                return attachUploadMeta(
+                    this.http.post({
+                        url: '/gists',
+                        body: JSON.stringify({
+                            description: this.key,
+                            public: false,
+                            files,
+                        }),
                     }),
-                });
+                );
             }
         }
     }
