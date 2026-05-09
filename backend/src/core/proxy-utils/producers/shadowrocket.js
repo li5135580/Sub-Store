@@ -32,7 +32,6 @@ export default function Shadowrocket_Producer() {
                 } else if (
                     [
                         'tailscale',
-                        'trusttunnel',
                         'mieru',
                         'sudoku',
                         'naive',
@@ -49,10 +48,10 @@ export default function Shadowrocket_Producer() {
                 ) {
                     return false;
                 } else if (['xhttp'].includes(proxy.network)) {
-                    $.info(
-                        `Shadowrocket 不支持从 mihomo 格式读取 XHTTP, 请使用 V2Ray 格式输出`,
+                    $.warn(
+                        `VLESS XHTTP 结构复杂, Shadowrocket 可能无法完全兼容`,
                     );
-                    return false;
+                    return true;
                 }
                 return true;
             })

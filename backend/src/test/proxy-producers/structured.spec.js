@@ -2274,33 +2274,4 @@ describe('Proxy structured producers', function () {
         const ds = internal[0]['xhttp-opts']['download-settings'];
         expect(ds).to.not.have.property('reality-opts');
     });
-
-    it('filters xhttp proxies from Shadowrocket by default', function () {
-        const proxies = [
-            {
-                type: 'vless',
-                name: 'VLESS XHTTP',
-                server: 'vless.example.com',
-                port: 443,
-                uuid: UUID,
-                tls: true,
-                network: 'xhttp',
-                'xhttp-opts': { path: '/xhttp' },
-            },
-            {
-                type: 'vless',
-                name: 'VLESS WS',
-                server: 'vless.example.com',
-                port: 443,
-                uuid: UUID,
-                tls: true,
-                network: 'ws',
-                'ws-opts': { path: '/ws' },
-            },
-        ];
-
-        const internal = produceInternal('Shadowrocket', proxies);
-
-        expect(internal.map((p) => p.name)).to.deep.equal(['VLESS WS']);
-    });
 });
