@@ -495,6 +495,44 @@ describe('VMess and VLESS parser coverage', function () {
             });
         });
 
+        it('parses VLESS share ECH config into mihomo ech opts', function () {
+            const proxy = parseOne(
+                `vless://${UUID}@vless-ws.example.com:443?type=ws&security=tls&host=cdn.example.com&path=%2Fws&ech=${encodeURIComponent(
+                    'ECHCONFIG',
+                )}#VLESS%20WS%20ECH`,
+            );
+
+            expectSubset(proxy, {
+                type: 'vless',
+                name: 'VLESS WS ECH',
+                _echConfigList: 'ECHCONFIG',
+                'ech-opts': {
+                    enable: true,
+                    config: 'ECHCONFIG',
+                },
+            });
+        });
+
+        it('parses VLESS share ECH DNS into mihomo sidecar fields', function () {
+            const echConfigList = 'ech.example.com+https://1.1.1.1/dns-query';
+            const proxy = parseOne(
+                `vless://${UUID}@vless-ws.example.com:443?type=ws&security=tls&host=cdn.example.com&path=%2Fws&ech=${encodeURIComponent(
+                    echConfigList,
+                )}#VLESS%20WS%20ECH%20DNS`,
+            );
+
+            expectSubset(proxy, {
+                type: 'vless',
+                name: 'VLESS WS ECH DNS',
+                _echConfigList: echConfigList,
+                'ech-opts': {
+                    enable: true,
+                    _dns: 'https://1.1.1.1/dns-query',
+                    'query-server-name': 'ech.example.com',
+                },
+            });
+        });
+
         it('rejects websocket VLESS shares with malformed early data size', function () {
             expect(
                 parseAll(
@@ -1641,6 +1679,55 @@ describe('VMess and VLESS parser coverage', function () {
             expect(
                 proxy['xhttp-opts']?.['download-settings'],
             ).to.not.have.property('sockopt');
+        });
+
+        it('parses nested xhttp download TLS ECH DNS fields into mihomo sidecar fields', function () {
+            const extra = JSON.stringify({
+                downloadSettings: {
+                    address: 'download.example.com',
+                    port: 8443,
+                    security: 'tls',
+                    tlsSettings: {
+                        echConfigList:
+                            'download-ech.example.com+https://1.1.1.1/dns-query',
+                        echForceQuery: 'half',
+                        echSockopt: {
+                            mark: 255,
+                        },
+                    },
+                    xhttpSettings: {
+                        path: '/download',
+                    },
+                },
+            });
+            const proxy = parseOne(
+                `vless://${UUID}@vless-xhttp.example.com:443?type=xhttp&security=tls&host=cdn.example.com&path=%2Fxhttp&mode=stream-up&extra=${encodeURIComponent(
+                    extra,
+                )}#VLESS%20XHTTP%20Nested%20ECH%20DNS`,
+            );
+
+            expectSubset(proxy, {
+                type: 'vless',
+                network: 'xhttp',
+                'xhttp-opts': {
+                    'download-settings': {
+                        server: 'download.example.com',
+                        port: 8443,
+                        tls: true,
+                        'ech-opts': {
+                            enable: true,
+                            _dns: 'https://1.1.1.1/dns-query',
+                            'query-server-name': 'download-ech.example.com',
+                            '_force-query': 'half',
+                            _sockopt: {
+                                mark: 255,
+                            },
+                        },
+                        path: '/download',
+                    },
+                },
+            });
+            expect(proxy).to.not.have.property('_extra_unsupported');
         });
 
         it('parses xhttp VLESS xmux ranges canonically and keeps unsupported keep-alive values in _extra_unsupported', function () {

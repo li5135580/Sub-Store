@@ -25,6 +25,11 @@ import {
     normalizeXhttpScalarUpperBound,
 } from '../xhttp-utils';
 import { extractPathQueryParam, getPathQueryParam } from '../transport-path';
+import {
+    buildMihomoEchOptsFromXrayFields,
+    isSupportedXrayEchConfigList,
+    isSupportedXrayEchForceQuery,
+} from '../ech-utils';
 
 function surge_port_hopping(raw) {
     const [parts, port_hopping] =
@@ -1235,14 +1240,50 @@ function URI_VLESS() {
                         }
 
                         const unsupportedTlsSettings = {};
+                        const hasSupportedEchConfigList =
+                            isSupportedXrayEchConfigList(value.echConfigList);
                         for (const [tlsKey, tlsValue] of Object.entries(
                             value,
                         )) {
                             switch (tlsKey) {
                                 case 'serverName':
                                 case 'fingerprint':
-                                case 'echConfigList':
                                     if (!isNotBlank(tlsValue)) {
+                                        setUnsupportedXhttpField(
+                                            unsupportedTlsSettings,
+                                            tlsKey,
+                                            tlsValue,
+                                        );
+                                    }
+                                    break;
+                                case 'echConfigList':
+                                    if (
+                                        !isSupportedXrayEchConfigList(tlsValue)
+                                    ) {
+                                        setUnsupportedXhttpField(
+                                            unsupportedTlsSettings,
+                                            tlsKey,
+                                            tlsValue,
+                                        );
+                                    }
+                                    break;
+                                case 'echForceQuery':
+                                    if (
+                                        !hasSupportedEchConfigList ||
+                                        !isSupportedXrayEchForceQuery(tlsValue)
+                                    ) {
+                                        setUnsupportedXhttpField(
+                                            unsupportedTlsSettings,
+                                            tlsKey,
+                                            tlsValue,
+                                        );
+                                    }
+                                    break;
+                                case 'echSockopt':
+                                    if (
+                                        !hasSupportedEchConfigList ||
+                                        !isPlainObject(tlsValue)
+                                    ) {
                                         setUnsupportedXhttpField(
                                             unsupportedTlsSettings,
                                             tlsKey,
@@ -1575,11 +1616,13 @@ function URI_VLESS() {
                 if (downloadSettings.tlsSettings.allowInsecure === true) {
                     parsedDownloadSettings['skip-cert-verify'] = true;
                 }
-                if (isNotBlank(downloadSettings.tlsSettings.echConfigList)) {
-                    parsedDownloadSettings['ech-opts'] = {
-                        enable: true,
-                        config: downloadSettings.tlsSettings.echConfigList,
-                    };
+                const echOpts = buildMihomoEchOptsFromXrayFields({
+                    echConfigList: downloadSettings.tlsSettings.echConfigList,
+                    echForceQuery: downloadSettings.tlsSettings.echForceQuery,
+                    echSockopt: downloadSettings.tlsSettings.echSockopt,
+                });
+                if (echOpts) {
+                    parsedDownloadSettings['ech-opts'] = echOpts;
                 }
             }
 
@@ -1711,6 +1754,12 @@ function URI_VLESS() {
         proxy.alpn = params.alpn ? params.alpn.split(',') : undefined;
         proxy['skip-cert-verify'] = /(TRUE)|1/i.test(params.allowInsecure);
         proxy._echConfigList = getIfPresent(params.ech);
+        const echOpts = buildMihomoEchOptsFromXrayFields({
+            echConfigList: params.ech,
+        });
+        if (echOpts) {
+            proxy['ech-opts'] = echOpts;
+        }
         proxy['tls-fingerprint'] = getIfPresent(params.pcs);
         proxy._h2 = /(TRUE)|1/i.test(params.h2);
 

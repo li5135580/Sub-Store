@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import { describe, it } from 'mocha';
 
+import $ from '@/core/app';
 import { ProxyUtils } from '@/core/proxy-utils';
 import {
     UUID,
@@ -10,6 +11,18 @@ import {
     produceExternal,
     produceInternal,
 } from './helpers';
+
+function captureWarns(fn) {
+    const originalWarn = $.warn;
+    const warnings = [];
+    $.warn = (message) => warnings.push(message);
+    try {
+        const result = fn();
+        return { result, warnings };
+    } finally {
+        $.warn = originalWarn;
+    }
+}
 
 describe('Proxy structured producers', function () {
     it('filters unsupported Clash proxies by default and normalizes vmess ws early data', function () {
@@ -405,9 +418,7 @@ describe('Proxy structured producers', function () {
             })[0]['ws-opts'];
 
             expect(wsOpts.path, platform).to.equal('/upgrade?a=1&b=2');
-            expect(wsOpts['_v2ray-http-upgrade-ed'], platform).to.equal(
-                '4096',
-            );
+            expect(wsOpts['_v2ray-http-upgrade-ed'], platform).to.equal('4096');
         }
     });
 
@@ -534,6 +545,54 @@ describe('Proxy structured producers', function () {
                 'sc-min-posts-interval-ms': 300,
             },
         });
+    });
+
+    it('warns when Mihomo ECH sidecar DNS fields are exported', function () {
+        const proxy = {
+            type: 'vless',
+            name: 'Mihomo ECH DNS',
+            server: 'vless.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            sni: 'sni.example.com',
+            'ech-opts': {
+                enable: true,
+                _dns: 'https://1.1.1.1/dns-query',
+                'query-server-name': 'ech.example.com',
+            },
+            network: 'xhttp',
+            'xhttp-opts': {
+                path: '/xhttp',
+                mode: 'stream-up',
+                'download-settings': {
+                    server: 'download.example.com',
+                    port: 8443,
+                    tls: true,
+                    'ech-opts': {
+                        enable: true,
+                        _dns: 'https://dns.example.com/dns-query',
+                        'query-server-name': 'download-ech.example.com',
+                    },
+                },
+            },
+        };
+
+        const { result: external, warnings } = captureWarns(() =>
+            loadProducedYaml('Mihomo', proxy),
+        );
+
+        expect(external.proxies).to.have.length(1);
+        expect(warnings).to.have.length(2);
+        expect(warnings[0]).to.include(
+            'mihomo 不支持在 ech-opts 中配置 ECH DNS',
+        );
+        expect(warnings[0]).to.include(
+            'dns["nameserver-policy"]["ech.example.com"] = ["https://1.1.1.1/dns-query"]',
+        );
+        expect(warnings[1]).to.include(
+            'dns["nameserver-policy"]["download-ech.example.com"] = ["https://dns.example.com/dns-query"]',
+        );
     });
 
     it('emits Mihomo VLESS xhttp download settings with scMinPostsIntervalMs', function () {

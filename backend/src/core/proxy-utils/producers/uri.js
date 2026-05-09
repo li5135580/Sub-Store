@@ -1,5 +1,6 @@
 /* eslint-disable no-case-declarations */
 import { Base64 } from 'js-base64';
+import $ from '@/core/app';
 import { isIPv6, isPlainObject } from '@/utils';
 import { getWireGuardAddressWithCIDR, normalizePluginMuxValue } from './utils';
 import {
@@ -13,6 +14,10 @@ import {
     parseSafeIntegerValue,
     setPathQueryParam,
 } from '../transport-path';
+import {
+    buildXrayEchConfigListFromMihomo,
+    buildXrayEchFieldsFromMihomo,
+} from '../ech-utils';
 
 function toStringHeaderMap(headers, { excludeHost = false } = {}) {
     if (!isPlainObject(headers)) {
@@ -89,6 +94,19 @@ function parseIntegerLikeValue(value) {
 
 function getSerializableXhttpRangeValue(value) {
     return normalizeXhttpNonNegativeRange(value);
+}
+
+function warnEchDefaultDns({
+    defaultDns,
+    dnsFieldPath,
+    echOptsPath,
+    proxyName,
+    queryServerName,
+}) {
+    const proxyLabel = proxyName || '未命名节点';
+    $.warn(
+        `URI ECH: 节点 "${proxyLabel}" 的 ${echOptsPath} 已开启且设置 query-server-name="${queryServerName}", 但未设置 ${dnsFieldPath}; 已使用默认 DNS ${defaultDns}. 如需自定义, 请设置 ${dnsFieldPath}.`,
+    );
 }
 
 function getTransportHost(network, transportOpts = {}) {
@@ -246,7 +264,11 @@ function applyStructuredXhttpExtraFields(
     }
 }
 
-function buildXhttpDownloadSettings(downloadSettings, outerXhttpOpts = {}) {
+function buildXhttpDownloadSettings(
+    downloadSettings,
+    outerXhttpOpts = {},
+    proxy = {},
+) {
     if (!isPlainObject(downloadSettings)) {
         return undefined;
     }
@@ -295,11 +317,27 @@ function buildXhttpDownloadSettings(downloadSettings, outerXhttpOpts = {}) {
             ? downloadSettings.alpn
             : [downloadSettings.alpn];
     }
-    if (
-        isPlainObject(downloadSettings['ech-opts']) &&
-        downloadSettings['ech-opts'].config
-    ) {
-        tlsSettings.echConfigList = downloadSettings['ech-opts'].config;
+    const echFields = buildXrayEchFieldsFromMihomo(
+        downloadSettings['ech-opts'],
+        undefined,
+        {
+            dnsFieldPath: 'xhttp-opts.download-settings.ech-opts._dns',
+            warnDefaultDns: (context) =>
+                warnEchDefaultDns({
+                    ...context,
+                    echOptsPath: 'xhttp-opts.download-settings.ech-opts',
+                    proxyName: proxy.name,
+                }),
+        },
+    );
+    if (echFields.echConfigList) {
+        tlsSettings.echConfigList = echFields.echConfigList;
+    }
+    if (echFields.echForceQuery) {
+        tlsSettings.echForceQuery = echFields.echForceQuery;
+    }
+    if (echFields.echSockopt) {
+        tlsSettings.echSockopt = cloneXhttpExtraValue(echFields.echSockopt);
     }
     if (Object.keys(tlsSettings).length > 0) {
         result.tlsSettings = tlsSettings;
@@ -386,6 +424,7 @@ function buildStructuredVlessExtraObject(proxy) {
     const downloadSettings = buildXhttpDownloadSettings(
         xhttpOpts['download-settings'],
         xhttpOpts,
+        proxy,
     );
     if (downloadSettings) {
         extra.downloadSettings = downloadSettings;
@@ -541,8 +580,21 @@ function vless(proxy) {
         pcs = `&pcs=${encodeURIComponent(proxy['tls-fingerprint'])}`;
     }
     let ech = '';
-    if (proxy._echConfigList) {
-        ech = `&ech=${encodeURIComponent(proxy._echConfigList)}`;
+    const echConfigList = buildXrayEchConfigListFromMihomo(
+        proxy['ech-opts'],
+        proxy._echConfigList,
+        {
+            dnsFieldPath: 'ech-opts._dns',
+            warnDefaultDns: (context) =>
+                warnEchDefaultDns({
+                    ...context,
+                    echOptsPath: 'ech-opts',
+                    proxyName: proxy.name,
+                }),
+        },
+    );
+    if (echConfigList) {
+        ech = `&ech=${encodeURIComponent(echConfigList)}`;
     }
     let sni = '';
     if (proxy.sni) {

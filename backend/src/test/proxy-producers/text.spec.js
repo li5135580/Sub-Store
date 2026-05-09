@@ -2,9 +2,22 @@ import { expect } from 'chai';
 import { Base64 } from 'js-base64';
 import { describe, it } from 'mocha';
 
+import $ from '@/core/app';
 import { ProxyUtils } from '@/core/proxy-utils';
 import QX_Producer from '@/core/proxy-utils/producers/qx';
 import { produceExternal, UUID } from './helpers';
+
+function captureWarns(fn) {
+    const originalWarn = $.warn;
+    const warnings = [];
+    $.warn = (message) => warnings.push(message);
+    try {
+        const result = fn();
+        return { result, warnings };
+    } finally {
+        $.warn = originalWarn;
+    }
+}
 
 describe('Proxy text producers', function () {
     it('produces Quantumult X shadowsocks over-tls lines from canonical tls nodes', function () {
@@ -793,9 +806,7 @@ describe('Proxy text producers', function () {
         expect(reparsed['ws-opts']['early-data-header-name']).to.equal(
             'Sec-WebSocket-Protocol',
         );
-        expect(reparsed['ws-opts']).to.not.have.property(
-            'v2ray-http-upgrade',
-        );
+        expect(reparsed['ws-opts']).to.not.have.property('v2ray-http-upgrade');
     });
 
     it('does not serialize URI websocket early data for formats without custom header support', function () {
@@ -1127,6 +1138,149 @@ describe('Proxy text producers', function () {
         );
     });
 
+    it('produces URI VLESS links with ech from mihomo ech opts config', function () {
+        const output = produceExternal('URI', {
+            type: 'vless',
+            name: 'URI WS ECH',
+            server: 'vless.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            sni: 'sni.example.com',
+            _echConfigList: 'STALE',
+            'ech-opts': {
+                enable: true,
+                config: 'ECHCONFIG',
+            },
+            network: 'ws',
+            'ws-opts': {
+                path: '/ws',
+                headers: {
+                    Host: 'cdn.example.com',
+                },
+            },
+        });
+
+        expect(output).to.equal(
+            `vless://${UUID}@vless.example.com:443?security=tls&type=ws&path=%2Fws&host=cdn.example.com&ech=ECHCONFIG&sni=sni.example.com#URI%20WS%20ECH`,
+        );
+    });
+
+    it('matches mihomo ECH enable decoding when producing URI VLESS links', function () {
+        const baseProxy = {
+            type: 'vless',
+            server: 'vless.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            sni: 'sni.example.com',
+            _echConfigList: 'FALLBACK',
+            network: 'ws',
+            'ws-opts': {
+                path: '/ws',
+                headers: {
+                    Host: 'cdn.example.com',
+                },
+            },
+        };
+        const outputWithNumericEnable = produceExternal('URI', {
+            ...baseProxy,
+            name: 'URI WS ECH Numeric',
+            'ech-opts': {
+                enable: 1,
+                config: 'ECHCONFIG',
+            },
+        });
+        const outputWithoutEnable = produceExternal('URI', {
+            ...baseProxy,
+            name: 'URI WS ECH Missing Enable',
+            'ech-opts': {
+                config: 'ECHCONFIG',
+            },
+        });
+        const outputWithStringEnable = produceExternal('URI', {
+            ...baseProxy,
+            name: 'URI WS ECH String Enable',
+            'ech-opts': {
+                enable: 'true',
+                config: 'ECHCONFIG',
+            },
+        });
+
+        expect(outputWithNumericEnable).to.equal(
+            `vless://${UUID}@vless.example.com:443?security=tls&type=ws&path=%2Fws&host=cdn.example.com&ech=ECHCONFIG&sni=sni.example.com#URI%20WS%20ECH%20Numeric`,
+        );
+        expect(outputWithoutEnable).to.not.include('&ech=');
+        expect(outputWithStringEnable).to.not.include('&ech=');
+    });
+
+    it('produces URI VLESS links with ech DNS from mihomo sidecar fields', function () {
+        const echConfigList = 'ech.example.com+https://1.1.1.1/dns-query';
+        const output = produceExternal('URI', {
+            type: 'vless',
+            name: 'URI WS ECH DNS',
+            server: 'vless.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            sni: 'sni.example.com',
+            'ech-opts': {
+                enable: true,
+                _dns: 'https://1.1.1.1/dns-query',
+                'query-server-name': 'ech.example.com',
+            },
+            network: 'ws',
+            'ws-opts': {
+                path: '/ws',
+                headers: {
+                    Host: 'cdn.example.com',
+                },
+            },
+        });
+
+        expect(output).to.equal(
+            `vless://${UUID}@vless.example.com:443?security=tls&type=ws&path=%2Fws&host=cdn.example.com&ech=${encodeURIComponent(
+                echConfigList,
+            )}&sni=sni.example.com#URI%20WS%20ECH%20DNS`,
+        );
+    });
+
+    it('uses default ECH DNS and warns when URI VLESS ech opts only set query server name', function () {
+        const echConfigList =
+            'ech.example.com+https://dns.alidns.com/dns-query';
+        const { result: output, warnings } = captureWarns(() =>
+            produceExternal('URI', {
+                type: 'vless',
+                name: 'URI WS ECH Default DNS',
+                server: 'vless.example.com',
+                port: 443,
+                uuid: UUID,
+                tls: true,
+                sni: 'sni.example.com',
+                'ech-opts': {
+                    enable: true,
+                    'query-server-name': 'ech.example.com',
+                },
+                network: 'ws',
+                'ws-opts': {
+                    path: '/ws',
+                    headers: {
+                        Host: 'cdn.example.com',
+                    },
+                },
+            }),
+        );
+
+        expect(output).to.equal(
+            `vless://${UUID}@vless.example.com:443?security=tls&type=ws&path=%2Fws&host=cdn.example.com&ech=${encodeURIComponent(
+                echConfigList,
+            )}&sni=sni.example.com#URI%20WS%20ECH%20Default%20DNS`,
+        );
+        expect(warnings).to.have.length(1);
+        expect(warnings[0]).to.include('https://dns.alidns.com/dns-query');
+        expect(warnings[0]).to.include('ech-opts._dns');
+    });
+
     it('produces URI VLESS fake-http links with method and headerType', function () {
         const output = produceExternal('URI', {
             type: 'vless',
@@ -1338,9 +1492,7 @@ describe('Proxy text producers', function () {
             'max-early-data',
         );
         expect(reparsedSsWs['ws-opts'].path).to.equal('/ws?a=1&b=2');
-        expect(reparsedSsWs['ws-opts']).to.not.have.property(
-            'max-early-data',
-        );
+        expect(reparsedSsWs['ws-opts']).to.not.have.property('max-early-data');
         expect(invalidHttpUpgradeOutput).to.equal(
             `vless://${UUID}@vless-upgrade.example.com:443?security=tls&type=httpupgrade&path=%2Fupgrade%3Fed%3D2560&host=upgrade.example.com#URI%20Upgrade%20Invalid%20Metadata`,
         );
@@ -2590,6 +2742,193 @@ describe('Proxy text producers', function () {
         ).to.deep.equal({
             'public-key': 'pubkey',
             'short-id': '08',
+        });
+    });
+
+    it('produces nested xhttp download TLS ECH DNS fields from mihomo sidecar fields', function () {
+        const output = produceExternal('URI', {
+            type: 'vless',
+            name: 'URI XHTTP Nested ECH DNS',
+            server: 'vless-xhttp.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            sni: 'sni.example.com',
+            network: 'xhttp',
+            'xhttp-opts': {
+                path: '/xhttp',
+                mode: 'stream-up',
+                headers: {
+                    Host: 'cdn.example.com',
+                },
+                'download-settings': {
+                    server: 'download.example.com',
+                    port: 8443,
+                    tls: true,
+                    'ech-opts': {
+                        enable: true,
+                        _dns: 'https://1.1.1.1/dns-query',
+                        'query-server-name': 'download-ech.example.com',
+                        '_force-query': 'full',
+                        _sockopt: {
+                            mark: 255,
+                        },
+                    },
+                    path: '/download',
+                    host: 'download-host.example.com',
+                },
+            },
+        });
+
+        const [, encodedExtra] = output.match(/[?&]extra=([^#]+)/);
+        const extra = JSON.parse(decodeURIComponent(encodedExtra));
+        expect(extra.downloadSettings?.tlsSettings).to.deep.equal({
+            echConfigList: 'download-ech.example.com+https://1.1.1.1/dns-query',
+            echForceQuery: 'full',
+            echSockopt: {
+                mark: 255,
+            },
+        });
+
+        const reparsed = ProxyUtils.parse(output);
+        expect(reparsed, output).to.have.length(1);
+        expect(
+            reparsed[0]['xhttp-opts']?.['download-settings']?.['ech-opts'],
+        ).to.deep.equal({
+            enable: true,
+            _dns: 'https://1.1.1.1/dns-query',
+            'query-server-name': 'download-ech.example.com',
+            '_force-query': 'full',
+            _sockopt: {
+                mark: 255,
+            },
+        });
+    });
+
+    it('uses default ECH DNS and warns for nested xhttp download ECH query server name without DNS', function () {
+        const { result: output, warnings } = captureWarns(() =>
+            produceExternal('URI', {
+                type: 'vless',
+                name: 'URI XHTTP Nested ECH Default DNS',
+                server: 'vless-xhttp.example.com',
+                port: 443,
+                uuid: UUID,
+                tls: true,
+                sni: 'sni.example.com',
+                network: 'xhttp',
+                'xhttp-opts': {
+                    path: '/xhttp',
+                    mode: 'stream-up',
+                    headers: {
+                        Host: 'cdn.example.com',
+                    },
+                    'download-settings': {
+                        server: 'download.example.com',
+                        port: 8443,
+                        tls: true,
+                        'ech-opts': {
+                            enable: true,
+                            'query-server-name': 'download-ech.example.com',
+                            '_force-query': 'half',
+                        },
+                        path: '/download',
+                    },
+                },
+            }),
+        );
+
+        const [, encodedExtra] = output.match(/[?&]extra=([^#]+)/);
+        const extra = JSON.parse(decodeURIComponent(encodedExtra));
+        expect(extra.downloadSettings?.tlsSettings).to.deep.equal({
+            echConfigList:
+                'download-ech.example.com+https://dns.alidns.com/dns-query',
+            echForceQuery: 'half',
+        });
+        expect(warnings).to.have.length(1);
+        expect(warnings[0]).to.include('https://dns.alidns.com/dns-query');
+        expect(warnings[0]).to.include(
+            'xhttp-opts.download-settings.ech-opts._dns',
+        );
+    });
+
+    it('omits nested xhttp download TLS ECH extras without an ECH config list', function () {
+        const output = produceExternal('URI', {
+            type: 'vless',
+            name: 'URI XHTTP Nested ECH Sidecar Only',
+            server: 'vless-xhttp.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            sni: 'sni.example.com',
+            network: 'xhttp',
+            'xhttp-opts': {
+                path: '/xhttp',
+                mode: 'stream-up',
+                headers: {
+                    Host: 'cdn.example.com',
+                },
+                'download-settings': {
+                    server: 'download.example.com',
+                    port: 8443,
+                    tls: true,
+                    'ech-opts': {
+                        enable: true,
+                        '_force-query': 'full',
+                        _sockopt: {
+                            mark: 255,
+                        },
+                    },
+                    path: '/download',
+                },
+            },
+        });
+
+        const [, encodedExtra] = output.match(/[?&]extra=([^#]+)/);
+        const extra = JSON.parse(decodeURIComponent(encodedExtra));
+        expect(extra.downloadSettings?.security).to.equal('tls');
+        expect(extra.downloadSettings).to.not.have.property('tlsSettings');
+    });
+
+    it('drops unsupported nested xhttp download TLS ECH force query values', function () {
+        const output = produceExternal('URI', {
+            type: 'vless',
+            name: 'URI XHTTP Nested ECH Invalid Force Query',
+            server: 'vless-xhttp.example.com',
+            port: 443,
+            uuid: UUID,
+            tls: true,
+            sni: 'sni.example.com',
+            network: 'xhttp',
+            'xhttp-opts': {
+                path: '/xhttp',
+                mode: 'stream-up',
+                headers: {
+                    Host: 'cdn.example.com',
+                },
+                'download-settings': {
+                    server: 'download.example.com',
+                    port: 8443,
+                    tls: true,
+                    'ech-opts': {
+                        enable: true,
+                        _dns: 'https://1.1.1.1/dns-query',
+                        '_force-query': 'invalid',
+                        _sockopt: {
+                            mark: 255,
+                        },
+                    },
+                    path: '/download',
+                },
+            },
+        });
+
+        const [, encodedExtra] = output.match(/[?&]extra=([^#]+)/);
+        const extra = JSON.parse(decodeURIComponent(encodedExtra));
+        expect(extra.downloadSettings?.tlsSettings).to.deep.equal({
+            echConfigList: 'https://1.1.1.1/dns-query',
+            echSockopt: {
+                mark: 255,
+            },
         });
     });
 

@@ -4,10 +4,12 @@ import {
     produceProxyListOutput,
     supportsShadowsocksV2rayPluginMode,
 } from '@/core/proxy-utils/producers/utils';
+import { isNotBlank, isPlainObject } from '@/utils';
 import {
     deleteHttpUpgradeEarlyDataMetadata,
     normalizeWebSocketEarlyDataPath,
 } from '../transport-path';
+import { ECH_DNS_FIELD } from '../ech-utils';
 import $ from '@/core/app';
 
 const ipVersions = {
@@ -17,6 +19,32 @@ const ipVersions = {
     'prefer-v4': 'ipv4-prefer',
     'prefer-v6': 'ipv6-prefer',
 };
+
+function warnMihomoUnsupportedEchDns(proxy, echOpts, echOptsPath) {
+    if (!isPlainObject(echOpts) || !isNotBlank(echOpts[ECH_DNS_FIELD])) {
+        return;
+    }
+
+    const queryServerName = isNotBlank(echOpts['query-server-name'])
+        ? echOpts['query-server-name']
+        : '这里是 query-server-name';
+    $.warn(
+        `mihomo 不支持在 ech-opts 中配置 ECH DNS. 如需跟节点 ECH 配置一致, 请在 mihomo 配置文件里设置 dns["nameserver-policy"]["${queryServerName}"] = ["${echOpts[ECH_DNS_FIELD]}"].`,
+    );
+}
+
+function warnMihomoUnsupportedEchDnsFields(proxy, type) {
+    if (type === 'internal') {
+        return;
+    }
+
+    warnMihomoUnsupportedEchDns(proxy, proxy['ech-opts'], 'ech-opts');
+    warnMihomoUnsupportedEchDns(
+        proxy,
+        proxy['xhttp-opts']?.['download-settings']?.['ech-opts'],
+        'xhttp-opts.download-settings.ech-opts',
+    );
+}
 
 export default function ClashMeta_Producer() {
     const type = 'ALL';
@@ -90,6 +118,8 @@ export default function ClashMeta_Producer() {
                 return true;
             })
             .map((proxy) => {
+                warnMihomoUnsupportedEchDnsFields(proxy, type);
+
                 if (proxy['reality-opts'] && !proxy['client-fingerprint']) {
                     proxy['client-fingerprint'] = 'chrome';
                 }
