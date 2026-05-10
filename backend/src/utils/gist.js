@@ -36,10 +36,11 @@ export default class Gist {
         const { isStash, isLoon, isShadowRocket, isQX } = ENV();
         const {
             defaultProxy,
-            defaultTimeout: timeout,
+            githubApiTimeout,
             githubProxy,
             githubApiUrl,
         } = $.read(SETTINGS_KEY);
+        const githubApiRequestTimeout = githubApiTimeout || 10000;
         const githubGistBaseURL = getGithubGistBaseURL({
             githubApiUrl,
             githubProxy,
@@ -75,7 +76,7 @@ export default class Gist {
                 ...(isLoon && proxy ? { node: proxy } : {}),
                 ...(isQX && proxy ? { opts: { policy: proxy } } : {}),
                 ...(proxy ? getPolicyDescriptor(proxy) : {}),
-                timeout: timeout || 8000,
+                timeout: githubApiRequestTimeout,
 
                 events: {
                     onResponse: (resp) => {
@@ -125,7 +126,7 @@ export default class Gist {
                 ...(isLoon && proxy ? { node: proxy } : {}),
                 ...(isQX && proxy ? { opts: { policy: proxy } } : {}),
                 ...(proxy ? getPolicyDescriptor(proxy) : {}),
-                timeout: timeout || 8000,
+                timeout: githubApiRequestTimeout,
 
                 events: {
                     onResponse: (resp) => {

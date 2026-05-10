@@ -67,6 +67,7 @@ async function updateSettings(req, res) {
         };
         [
             'defaultTimeout',
+            'githubApiTimeout',
             'cacheThreshold',
             'resourceCacheTtl',
             'headersCacheTtl',
@@ -117,6 +118,7 @@ export async function updateAvatar() {
         syncPlatform,
         githubProxy,
         githubApiUrl,
+        githubApiTimeout,
     } = settings;
     if (username) {
         if (syncPlatform === 'gitlab') {
@@ -130,6 +132,7 @@ export async function updateAvatar() {
                             'User-Agent':
                                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.141 Safari/537.36',
                         },
+                        timeout: githubApiTimeout || 10000,
                     })
                     .then((resp) => JSON.parse(resp.body));
                 settings.avatarUrl = data[0]['avatar_url'].replace(
@@ -157,6 +160,7 @@ export async function updateAvatar() {
                             'User-Agent':
                                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.141 Safari/537.36',
                         },
+                        timeout: githubApiTimeout || 10000,
                     })
                     .then((resp) => JSON.parse(resp.body));
                 settings.avatarUrl = data['avatar_url'];
