@@ -181,9 +181,7 @@ async function downloadSubscription(req, res) {
         $.info(`指定生产类型: ${produceType}`);
     }
     if (includeUnsupportedProxy) {
-        $.info(
-            `包含官方/商店版/未续费订阅不支持的协议: ${includeUnsupportedProxy}`,
-        );
+        $.info(`包含官方/商店版不支持的协议: ${includeUnsupportedProxy}`);
     }
     if (prettyYaml) {
         $.info(`指定输出易读 YAML: ${prettyYaml}`);
@@ -488,9 +486,7 @@ async function downloadCollection(req, res) {
     }
 
     if (includeUnsupportedProxy) {
-        $.info(
-            `包含官方/商店版/未续费订阅不支持的协议: ${includeUnsupportedProxy}`,
-        );
+        $.info(`包含官方/商店版不支持的协议: ${includeUnsupportedProxy}`);
     }
     if (prettyYaml) {
         $.info(`指定输出易读 YAML: ${prettyYaml}`);
