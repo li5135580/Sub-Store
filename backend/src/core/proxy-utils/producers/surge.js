@@ -74,7 +74,7 @@ export default function Surge_Producer() {
                     (['tcp'].includes(proxy.network) && proxy['reality-opts']))
             ) {
                 throw unsupported(
-                    `Platform ${targetPlatform} does not support proxy type ${proxy.type} with network or reality`,
+                    `Platform ${targetPlatform} does not support proxy type ${proxy.type} with network or REALITY`,
                 );
             }
 

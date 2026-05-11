@@ -39,14 +39,6 @@ export default function Shadowrocket_Producer() {
                     ].includes(proxy.type)
                 ) {
                     return false;
-                } else if (
-                    ['anytls'].includes(proxy.type) &&
-                    proxy.network &&
-                    (!['tcp'].includes(proxy.network) ||
-                        (['tcp'].includes(proxy.network) &&
-                            proxy['reality-opts']))
-                ) {
-                    return false;
                 } else if (['xhttp'].includes(proxy.network)) {
                     $.warn(
                         `VLESS XHTTP 结构复杂, Shadowrocket 可能无法完全兼容`,

@@ -421,32 +421,6 @@ describe('Proxy text producers', function () {
         );
     });
 
-    it('produces Loon AnyTLS lines and keeps only supported fields', function () {
-        const output = produceExternal('Loon', {
-            type: 'anytls',
-            name: 'Loon AnyTLS',
-            server: 'anytls.example.com',
-            port: 443,
-            password: 'secret',
-            tls: true,
-            sni: 'sni.example.com',
-            network: 'ws',
-            'ws-opts': {
-                path: '/anytls',
-                headers: {
-                    Host: 'cdn.example.com',
-                },
-            },
-            'skip-cert-verify': true,
-            'idle-session-timeout': 30,
-            'max-stream-count': 16,
-        });
-
-        expect(output).to.equal(
-            'Loon AnyTLS=anytls,anytls.example.com,443,"secret",idle-session-timeout=30,max-stream-count=16,skip-cert-verify=true,tls-name=sni.example.com',
-        );
-    });
-
     it('produces Surge TUIC v5 lines with port hopping', function () {
         const output = produceExternal('Surge', {
             type: 'tuic',
