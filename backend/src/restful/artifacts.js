@@ -26,6 +26,17 @@ const ARTIFACT_GIST_PLACEHOLDER_CONTENT = [
     'Sub-Store placeholder',
     'This file keeps the Gist alive when all sync configuration files are deleted.',
 ].join('\n');
+const DEFAULT_ARTIFACT_SYNC_BATCH_SIZE = 10;
+
+function normalizeArtifactSyncBatchSize(value) {
+    const batchSize = Math.floor(Number(value));
+
+    if (!isFinite(batchSize) || batchSize <= 0) {
+        return DEFAULT_ARTIFACT_SYNC_BATCH_SIZE;
+    }
+
+    return batchSize;
+}
 
 export default function register($app) {
     // Initialization
@@ -411,5 +422,5 @@ function formatBytes(size) {
     return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export { syncToGist };
+export { syncToGist, normalizeArtifactSyncBatchSize };
 export { createArtifactItem, deleteArtifactItem };

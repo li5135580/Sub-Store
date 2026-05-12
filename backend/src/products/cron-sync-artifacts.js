@@ -6,8 +6,7 @@ import {
     COLLECTIONS_KEY,
 } from '@/constants';
 import $ from '@/core/app';
-import { produceArtifact } from '@/restful/sync';
-import { syncToGist } from '@/restful/artifacts';
+import { produceArtifact, uploadArtifactBatches } from '@/restful/sync';
 import { findByName } from '@/utils/database';
 import { hasCronArtifactSyncCredentials } from '@/products/cron-sync-artifacts-eligibility';
 
@@ -213,48 +212,12 @@ async function doSync(arg = {}) {
             );
         }
 
-        const resp = await syncToGist(files);
-        const body = JSON.parse(resp.body);
-        delete body.history;
-        delete body.forks;
-        delete body.owner;
-        Object.values(body.files).forEach((file) => {
-            delete file.content;
+        const uploaded = await uploadArtifactBatches({
+            allArtifacts,
+            files,
+            valid,
+            invalid,
         });
-        $.info('上传配置响应:');
-        $.info(JSON.stringify(body, null, 2));
-
-        for (const artifact of allArtifacts) {
-            if (
-                artifact.sync &&
-                artifact.source &&
-                valid.includes(artifact.name)
-            ) {
-                artifact.updated = new Date().getTime();
-                // extract real url from gist
-                let files = body.files;
-                let isGitLab;
-                if (Array.isArray(files)) {
-                    isGitLab = true;
-                    files = Object.fromEntries(
-                        files.map((item) => [item.path, item]),
-                    );
-                }
-                const raw_url =
-                    files[encodeURIComponent(artifact.name)]?.raw_url;
-                const new_url = isGitLab
-                    ? raw_url
-                    : raw_url?.replace(/\/raw\/[^/]*\/(.*)/, '/raw/$1');
-                $.info(
-                    `上传配置完成\n文件列表: ${Object.keys(files).join(
-                        ', ',
-                    )}\n当前文件: ${encodeURIComponent(
-                        artifact.name,
-                    )}\n响应返回的原始链接: ${raw_url}\n处理完的新链接: ${new_url}`,
-                );
-                artifact.url = new_url;
-            }
-        }
 
         $.write(allArtifacts, ARTIFACTS_KEY);
         $.info('上传配置成功');
@@ -262,7 +225,7 @@ async function doSync(arg = {}) {
         if (invalid.length > 0) {
             $.notify(
                 '🌍 Sub-Store',
-                `同步配置成功 ${valid.length} 个, 失败 ${invalid.length} 个, 详情请查看日志`,
+                `同步配置成功 ${uploaded.length} 个, 失败 ${invalid.length} 个, 详情请查看日志`,
             );
         } else if (syncSuccessNotify) {
             $.notify('🌍 Sub-Store', '同步配置完成');

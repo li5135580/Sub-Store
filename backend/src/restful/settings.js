@@ -68,6 +68,7 @@ async function updateSettings(req, res) {
         [
             'defaultTimeout',
             'githubApiTimeout',
+            'artifactSyncBatchSize',
             'cacheThreshold',
             'resourceCacheTtl',
             'headersCacheTtl',

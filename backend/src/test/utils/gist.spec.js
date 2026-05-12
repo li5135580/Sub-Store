@@ -7,7 +7,11 @@ import Gist, {
     describeGistApiErrorResponse,
     getGithubGistBaseURL,
 } from '@/utils/gist';
-import { syncToGist } from '@/restful/artifacts';
+import {
+    normalizeArtifactSyncBatchSize,
+    syncToGist,
+} from '@/restful/artifacts';
+import { uploadArtifactBatches } from '@/restful/sync';
 
 describe('Gist GitHub API URL', function () {
     it('uses the default GitHub API URL when unset', function () {
@@ -51,6 +55,13 @@ describe('Gist GitHub API URL', function () {
         ).to.equal(
             'ERROR: HTTP 500: Internal Server Error: Error: D1 query budget exceeded',
         );
+    });
+
+    it('normalizes artifact sync batch size', function () {
+        expect(normalizeArtifactSyncBatchSize()).to.equal(10);
+        expect(normalizeArtifactSyncBatchSize('')).to.equal(10);
+        expect(normalizeArtifactSyncBatchSize('0')).to.equal(10);
+        expect(normalizeArtifactSyncBatchSize('2.9')).to.equal(2);
     });
 
     it('keeps an existing Gist alive with a fallback file when a delete would empty it', async function () {
@@ -219,5 +230,89 @@ describe('Gist GitHub API URL', function () {
         expect(infoMessages).to.include(
             '准备同步 Gist: 文件数 1, 总大小 12 B, 最大文件 artifact (12 B)',
         );
+    });
+
+    it('continues uploading artifact batches after one batch fails', async function () {
+        const originalRead = $.read.bind($);
+        const originalWrite = $.write.bind($);
+        const originalInfo = $.info.bind($);
+        const originalLog = $.log.bind($);
+        const originalError = $.error.bind($);
+        const originalUpload = Gist.prototype.upload;
+        const writes = [];
+
+        $.read = (key) => {
+            if (key === SETTINGS_KEY) {
+                return {
+                    gistToken: 'token',
+                    artifactSyncBatchSize: 1,
+                };
+            }
+            return originalRead(key);
+        };
+        $.write = (data, key) => {
+            if (key === SETTINGS_KEY) {
+                writes.push(data);
+                return true;
+            }
+            return originalWrite(data, key);
+        };
+        $.info = () => {};
+        $.log = () => {};
+        $.error = () => {};
+        Gist.prototype.upload = async function (files) {
+            const filename = Object.keys(files)[0];
+            if (filename === 'b') {
+                throw new Error('batch failed');
+            }
+            return {
+                body: JSON.stringify({
+                    html_url: 'https://gist.example.com/sub-store',
+                    files: {
+                        [filename]: {
+                            raw_url: `https://gist.example.com/raw/hash/${filename}`,
+                        },
+                    },
+                }),
+            };
+        };
+
+        const allArtifacts = [
+            { name: 'a', sync: true, source: 'sub-a' },
+            { name: 'b', sync: true, source: 'sub-b' },
+            { name: 'c', sync: true, source: 'sub-c' },
+        ];
+        const invalid = [];
+
+        try {
+            const uploaded = await uploadArtifactBatches({
+                allArtifacts,
+                files: {
+                    a: { content: 'A' },
+                    b: { content: 'B' },
+                    c: { content: 'C' },
+                },
+                valid: ['a', 'b', 'c'],
+                invalid,
+            });
+
+            expect(uploaded).to.deep.equal(['a', 'c']);
+            expect(invalid).to.deep.equal(['b']);
+            expect(allArtifacts[0].url).to.equal(
+                'https://gist.example.com/raw/a',
+            );
+            expect(allArtifacts[1].url).to.equal(undefined);
+            expect(allArtifacts[2].url).to.equal(
+                'https://gist.example.com/raw/c',
+            );
+            expect(writes).to.have.length(2);
+        } finally {
+            $.read = originalRead;
+            $.write = originalWrite;
+            $.info = originalInfo;
+            $.log = originalLog;
+            $.error = originalError;
+            Gist.prototype.upload = originalUpload;
+        }
     });
 });
