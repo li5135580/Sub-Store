@@ -2384,6 +2384,7 @@ function Clash_All() {
         }
         if (
             ![
+                'openvpn',
                 'tailscale',
                 'trusttunnel',
                 'naive',

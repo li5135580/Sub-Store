@@ -36,6 +36,7 @@ export default function Shadowrocket_Producer() {
                         'sudoku',
                         'naive',
                         'masque',
+                        'openvpn',
                     ].includes(proxy.type)
                 ) {
                     return false;
