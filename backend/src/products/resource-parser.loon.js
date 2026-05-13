@@ -59,7 +59,7 @@ let resourceUrl = typeof $resourceUrl !== 'undefined' ? $resourceUrl : '';
                     undefined,
                     undefined,
                     undefined,
-                    undefined,
+                    arg?.noCache,
                     true,
                 );
                 let proxies = ProxyUtils.parse(raw);
