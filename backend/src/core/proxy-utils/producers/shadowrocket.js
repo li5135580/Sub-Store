@@ -32,7 +32,6 @@ export default function Shadowrocket_Producer() {
                 } else if (
                     [
                         'tailscale',
-                        'mieru',
                         'sudoku',
                         'naive',
                         'masque',
