@@ -56,9 +56,7 @@ export default function ClashMeta_Producer() {
                     return false;
                 } else if (proxy.type === 'snell' && proxy.version >= 4) {
                     return false;
-                } else if (
-                    ['tailscale', 'juicity', 'naive'].includes(proxy.type)
-                ) {
+                } else if (['juicity', 'naive'].includes(proxy.type)) {
                     return false;
                 } else if (
                     ['ss'].includes(proxy.type) &&

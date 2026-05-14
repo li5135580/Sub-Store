@@ -1490,6 +1490,63 @@ describe('Proxy structured producers', function () {
         });
     });
 
+    it('emits Tailscale endpoint fields for sing-box exports', function () {
+        const output = loadProducedJson('sing-box', {
+            type: 'tailscale',
+            name: 'Mihomo TS',
+            'state-dir': './mihomo-ts',
+            'auth-key': 'tskey-auth-test',
+            'control-url': 'https://headscale.example.com',
+            ephemeral: true,
+            hostname: 'sub-store',
+            udp: true,
+            'accept-routes': true,
+            'exit-node': '100.64.0.1',
+            'exit-node-allow-lan-access': true,
+            'dialer-proxy': 'proxy-out',
+            'udp-timeout': '30s',
+        });
+
+        const mihomo = output.endpoints.find(
+            (endpoint) => endpoint.tag === 'Mihomo TS',
+        );
+
+        expectSubset(mihomo, {
+            type: 'tailscale',
+            state_directory: './mihomo-ts',
+            auth_key: 'tskey-auth-test',
+            control_url: 'https://headscale.example.com',
+            ephemeral: true,
+            hostname: 'sub-store',
+            accept_routes: true,
+            exit_node: '100.64.0.1',
+            exit_node_allow_lan_access: true,
+            detour: 'proxy-out',
+            udp_timeout: '30s',
+        });
+        expect(mihomo).to.not.have.property('udp');
+    });
+
+    it('does not mix Tailscale control_http_client with legacy sing-box dialer fields', function () {
+        const output = loadProducedJson('sing-box', {
+            type: 'tailscale',
+            name: 'Tailscale Control Client',
+            'control-http-client': {
+                detour: 'control-out',
+            },
+            'dialer-proxy': 'legacy-out',
+        });
+
+        const tailscale = output.endpoints.find(
+            (endpoint) => endpoint.tag === 'Tailscale Control Client',
+        );
+
+        expect(tailscale.control_http_client).to.deep.equal({
+            detour: 'control-out',
+        });
+        expect(tailscale).to.not.have.property('detour');
+    });
+
     it('emits WireGuard interface CIDR suffixes for Egern exports', function () {
         const proxies = [
             {

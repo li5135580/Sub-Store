@@ -35,6 +35,17 @@ const domainResolverParser = (proxy, parsedProxy) => {
         };
     }
 };
+const hasControlHTTPClient = (proxy) => {
+    const value = proxy['control-http-client'];
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value.trim() !== '';
+    if (isPlainObject(value)) {
+        return Object.values(value).some(
+            (item) => item !== undefined && item !== null && item !== '',
+        );
+    }
+    return true;
+};
 const detourParser = (proxy, parsedProxy) => {
     parsedProxy.detour = proxy['dialer-proxy'] || proxy.detour;
 };
@@ -909,11 +920,13 @@ const anytlsParser = (proxy = {}) => {
     return parsedProxy;
 };
 const tailscaleParser = (proxy = {}) => {
+    const useControlHTTPClient = hasControlHTTPClient(proxy);
     const parsedProxy = {
         tag: proxy.name,
         type: 'tailscale',
+        control_http_client: proxy['control-http-client'],
         udp_timeout: proxy['udp-timeout'],
-        state_directory: proxy['state-directory'],
+        state_directory: proxy['state-dir'] || proxy['state-directory'],
         auth_key: proxy['auth-key'],
         control_url: proxy['control-url'],
         ephemeral: proxy.ephemeral,
@@ -947,9 +960,11 @@ const tailscaleParser = (proxy = {}) => {
             10,
         );
     networkParser(proxy, parsedProxy);
-    detourParser(proxy, parsedProxy);
-    ipVersionParser(proxy, parsedProxy);
-    domainResolverParser(proxy, parsedProxy);
+    if (!useControlHTTPClient) {
+        detourParser(proxy, parsedProxy);
+        ipVersionParser(proxy, parsedProxy);
+        domainResolverParser(proxy, parsedProxy);
+    }
     return parsedProxy;
 };
 
