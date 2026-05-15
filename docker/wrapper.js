@@ -94,7 +94,13 @@ app.delete(`${ADMIN_PREFIX}/api/shortlinks/:code`, (req, res) => {
     res.json({ status: 'success' });
 });
 
-// ---- 3. API/DL/Share proxy to backend ----
+// ---- 3. API health check (before proxy) ----
+
+app.get('/api', (_req, res) => {
+    res.json({ status: 'ok', version: '2.23.6' });
+});
+
+// ---- 4. API/DL/Share proxy to backend ----
 
 const apiProxy = createProxyMiddleware({
     target: `http://127.0.0.1:${BACKEND_PORT}`,
