@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($resp = Invoke-WebRequest -Uri \"https://sub-store-latest-otlc.onrender.com/index.js\" -UseBasicParsing; Write-Output \"Size: $\\($resp.Content.Length\\)\"; Write-Output \"Content: $\\($resp.Content\\)\")",
+      "PowerShell($html = Invoke-WebRequest -Uri \"https://sub-store-latest-otlc.onrender.com/\" -UseBasicParsing; Write-Output \"HTML: $\\($html.Content\\)\"; Write-Output \"---\"; $main = Invoke-WebRequest -Uri \"https://sub-store-latest-otlc.onrender.com/main.js\" -UseBasicParsing; Write-Output \"main.js size: $\\($main.Content.Length\\)\")",
+      "PowerShell($reg = Invoke-WebRequest -Uri \"https://sub-store-latest-otlc.onrender.com/registerSW.js\" -UseBasicParsing; Write-Output \"registerSW.js: $\\($reg.Content.Length\\) bytes\"; $css = Invoke-WebRequest -Uri \"https://sub-store-latest-otlc.onrender.com/main.css\" -UseBasicParsing; Write-Output \"main.css: $\\($css.Content.Length\\) bytes\")"
+    ]
+  }
+}
