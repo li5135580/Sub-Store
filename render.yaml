@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: sub-store
+    env: docker
+    runtime:
+      dockerfilePath: ./Dockerfile
+      dockerContext: .
+    plan: starter
+    healthCheckPath: /api/utils/env
+    envVars:
+      - key: SUB_STORE_BACKEND_API_HOST
+        value: 0.0.0.0
+      - key: SUB_STORE_DATA_BASE_PATH
+        value: /data
+      - key: SUB_STORE_ADMIN_PATH
+        value: /app/admin
+      - key: SUB_STORE_API_PREFIX
+        value: /api
+      - key: SUB_STORE_DOWNLOAD_PREFIX
+        value: /download
+      - key: SUB_STORE_SHARE_PREFIX
+        value: /share
+      - key: SUB_STORE_SHORTLINK_PREFIX
+        value: /s
+      - key: SUB_STORE_ADMIN_PREFIX
+        value: /admin
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_PREFIX
+        sync: false
+      - key: R2_SYNC_INTERVAL
+        value: "300"
+    autoDeploy: true
