@@ -35,18 +35,273 @@ const grammars = String.raw`
             proxy['shadow-tls-version'] = 2;
         }
     }
+    function stripQuotes(value) {
+        const trimmed = value.trim();
+        const quote = trimmed[0];
+        if (
+            (quote === '"' || quote === "'") &&
+            trimmed[trimmed.length - 1] === quote
+        ) {
+            return trimmed.slice(1, -1).replace(/\\(["'\\])/g, "$1");
+        }
+
+        return trimmed.replace(/\\(["'\\])/g, "$1");
+    }
+    function isEscaped(text, index) {
+        let count = 0;
+        let cursor = index - 1;
+
+        while (cursor >= 0 && text[cursor] === "\\") {
+            count++;
+            cursor--;
+        }
+
+        return count % 2 === 1;
+    }
+    function readQuotedHeaderKey(text, start) {
+        const quote = text[start];
+        let index = start + 1;
+        let hasKey = false;
+
+        while (index < text.length) {
+            const char = text[index];
+            if (char === "\\" && index + 1 < text.length) {
+                hasKey = true;
+                index += 2;
+                continue;
+            }
+            if (char === quote) {
+                return hasKey ? index + 1 : -1;
+            }
+
+            hasKey = true;
+            index++;
+        }
+
+        return -1;
+    }
+    function startsWithQuotedHeaderKey(text) {
+        const trimmed = text.trim();
+        if (trimmed[0] !== '"' && trimmed[0] !== "'") return false;
+
+        const index = readQuotedHeaderKey(trimmed, 0);
+        if (index === -1) return false;
+
+        let cursor = index;
+        while (cursor < trimmed.length && /\s/.test(trimmed[cursor])) cursor++;
+        return trimmed[cursor] === ":";
+    }
+    function stripOuterHeadersQuotes(headers) {
+        const trimmed = headers.trim();
+        const quote = trimmed[0];
+
+        if (
+            (quote === '"' || quote === "'") &&
+            trimmed[trimmed.length - 1] === quote &&
+            !startsWithQuotedHeaderKey(trimmed)
+        ) {
+            return trimmed.slice(1, -1);
+        }
+
+        return trimmed;
+    }
+    function isHeaderKeyStart(text, start) {
+        let index = start;
+        while (index < text.length && /\s/.test(text[index])) index++;
+
+        if (text[index] === '"' || text[index] === "'") {
+            index = readQuotedHeaderKey(text, index);
+            if (index === -1) return false;
+        } else {
+            const keyStart = index;
+            while (
+                index < text.length &&
+                /[!#$%&'*+\-.^_|~0-9A-Za-z]/.test(text[index])
+            )
+                index++;
+            if (index === keyStart) return false;
+        }
+
+        while (index < text.length && /\s/.test(text[index])) index++;
+        return text[index] === ":";
+    }
+    function isHeaderValueQuoteEnd(text, index) {
+        let cursor = index + 1;
+        while (cursor < text.length && /\s/.test(text[cursor])) cursor++;
+
+        return (
+            cursor >= text.length ||
+            text[cursor] === "," ||
+            (text[cursor] === ";" && isHeaderKeyStart(text, cursor + 1))
+        );
+    }
+    function findHeaderSeparator(pair) {
+        let quote = "";
+
+        for (let index = 0; index < pair.length; index++) {
+            const char = pair[index];
+
+            if (quote) {
+                if (char === "\\" && index + 1 < pair.length) {
+                    index++;
+                    continue;
+                }
+                if (char === quote) {
+                    quote = "";
+                }
+                continue;
+            }
+
+            if (char === '"' || char === "'") {
+                quote = char;
+                continue;
+            }
+
+            if (char === ":") {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    function readUnquotedHeadersEnd(text, start) {
+        let index = start;
+        let quote = "";
+        let quoteRole = "";
+        let seenSeparator = false;
+
+        while (index < text.length) {
+            const char = text[index];
+
+            if (quote) {
+                if (char === "\\" && index + 1 < text.length) {
+                    index += 2;
+                    continue;
+                }
+                if (char === quote) {
+                    if (
+                        quoteRole === "key" ||
+                        isHeaderValueQuoteEnd(text, index)
+                    ) {
+                        quote = "";
+                        quoteRole = "";
+                    }
+                }
+                index++;
+                continue;
+            }
+
+            if (char === '"' || char === "'") {
+                quote = char;
+                quoteRole = seenSeparator ? "value" : "key";
+                index++;
+                continue;
+            }
+
+            if (char === ":" && !seenSeparator) {
+                seenSeparator = true;
+                index++;
+                continue;
+            }
+
+            if (char === ";" && isHeaderKeyStart(text, index + 1)) {
+                seenSeparator = false;
+                index++;
+                continue;
+            }
+
+            if (char === ",") break;
+            index++;
+        }
+
+        return index;
+    }
+    function readQuotedHeadersEnd(text, start) {
+        const quote = text[start];
+        let index = start + 1;
+
+        while (index < text.length) {
+            if (text[index] === quote && !isEscaped(text, index)) {
+                let cursor = index + 1;
+                while (cursor < text.length && /\s/.test(text[cursor])) cursor++;
+                if (cursor >= text.length || text[cursor] === ",") {
+                    return index + 1;
+                }
+            }
+            index++;
+        }
+
+        return text.length;
+    }
+    function readHeadersEnd(text, start) {
+        let index = start;
+        while (index < text.length && /\s/.test(text[index])) index++;
+
+        if (
+            (text[index] === '"' || text[index] === "'") &&
+            !startsWithQuotedHeaderKey(text.slice(index))
+        ) {
+            return readQuotedHeadersEnd(text, index);
+        }
+
+        return readUnquotedHeadersEnd(text, start);
+    }
+    function splitHeaders(headers) {
+        const result = [];
+        let start = 0;
+        let quote = "";
+        let quoteRole = "";
+        let seenSeparator = false;
+
+        for (let index = 0; index < headers.length; index++) {
+            const char = headers[index];
+
+            if (quote) {
+                if (char === "\\" && index + 1 < headers.length) {
+                    index++;
+                    continue;
+                }
+                if (char === quote) {
+                    if (
+                        quoteRole === "key" ||
+                        isHeaderValueQuoteEnd(headers, index)
+                    ) {
+                        quote = "";
+                        quoteRole = "";
+                    }
+                }
+                continue;
+            }
+
+            if (char === '"' || char === "'") {
+                quote = char;
+                quoteRole = seenSeparator ? "value" : "key";
+                continue;
+            }
+
+            if (char === ":" && !seenSeparator) {
+                seenSeparator = true;
+                continue;
+            }
+
+            if (char === ";" && isHeaderKeyStart(headers, index + 1)) {
+                result.push(headers.slice(start, index));
+                start = index + 1;
+                seenSeparator = false;
+            }
+        }
+
+        result.push(headers.slice(start));
+        return result;
+    }
     function parseHeaders(headers) {
         const result = {};
-        headers.split(";").forEach((pair) => {
-            const index = pair.indexOf(":");
+        splitHeaders(stripOuterHeadersQuotes(headers)).forEach((pair) => {
+            const index = findHeaderSeparator(pair);
             if (index === -1) return;
 
-            const key = pair.slice(0, index).trim();
-            const value = pair
-                .slice(index + 1)
-                .trim()
-                .replace(/^"(.*?)"$/, "$1")
-                .replace(/^'(.*?)'$/, "$1");
+            const key = stripQuotes(pair.slice(0, index));
+            const value = stripQuotes(pair.slice(index + 1));
 
             if (key) {
                 result[key] = value;
@@ -250,7 +505,14 @@ ws_headers = comma "ws-headers" equals headers:$[^,]+ {
     obfs["ws-headers"] = result;
 }
 ws_path = comma "ws-path" equals path:uri { obfs.path = path.trim().replace(/^"(.*?)"$/, '$1').replace(/^'(.*?)'$/, '$1'); }
-headers = comma "headers" equals headers:$[^,]+ { proxy.headers = parseHeaders(headers); }
+headers = comma "headers" equals & {
+    const start = peg$currPos;
+    const index = readHeadersEnd(input, start);
+
+    $.headers = input.substring(start, index);
+    peg$currPos = index;
+    return $.headers.trim().length > 0;
+} { proxy.headers = parseHeaders($.headers); }
 
 obfs = comma "obfs" equals type:("http"/"tls") { obfs.type = type; }
 obfs_host = comma "obfs-host" equals match:[^,]+ { obfs.host = match.join("").replace(/^"(.*)"$/, '$1'); };

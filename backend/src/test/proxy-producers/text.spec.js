@@ -508,11 +508,48 @@ describe('Proxy text producers', function () {
         );
 
         expect(output.split('\n')).to.deep.equal([
-            'Surge HTTP Headers=http,http.example.com,8080,username="user",password="pass",headers=X-Client:Surge;X-Token:abc',
-            'Surge HTTPS Headers=https,https.example.com,443,headers=X-Padding:<random-string(16)>,sni="sni.example.com"',
-            'Surge H2 Headers=h2-connect,h2.example.com,443,headers=X-Padding:<random-string(16-32)>,sni="sni.example.com"',
-            'Surge Trust Headers=trust-tunnel,trust.example.com,443,username="user",password="pass",headers=X-Client:Surge,sni="sni.example.com"',
+            'Surge HTTP Headers=http,http.example.com,8080,username="user",password="pass",headers="X-Client:"Surge";X-Token:"abc""',
+            'Surge HTTPS Headers=https,https.example.com,443,headers="X-Padding:"<random-string(16)>"",sni="sni.example.com"',
+            'Surge H2 Headers=h2-connect,h2.example.com,443,headers="X-Padding:"<random-string(16-32)>"",sni="sni.example.com"',
+            'Surge Trust Headers=trust-tunnel,trust.example.com,443,username="user",password="pass",headers="X-Client:"Surge"",sni="sni.example.com"',
         ]);
+    });
+
+    it('round-trips Surge root headers with nested quotes and separators', function () {
+        const output = ProxyUtils.produce(
+            [
+                {
+                    type: 'http',
+                    name: 'Surge Nested Headers',
+                    server: 'nested.example.com',
+                    port: 443,
+                    tls: true,
+                    sni: 'sni.example.com',
+                    headers: {
+                        Host: 'nested.example.com',
+                        'X-Comma': 'a,b',
+                        'User-Agent': 'client/1.0 (Linux; U; Android 11)',
+                        'X-Quote': 'a",b',
+                        'X-Backslash': 'c\\d',
+                    },
+                },
+            ],
+            'Surge',
+            'external',
+        );
+
+        const [proxy] = ProxyUtils.parse(output);
+
+        expect(proxy.headers).to.deep.equal({
+            Host: 'nested.example.com',
+            'X-Comma': 'a,b',
+            'User-Agent': 'client/1.0 (Linux; U; Android 11)',
+            'X-Quote': 'a",b',
+            'X-Backslash': 'c\\d',
+        });
+        expect(output).to.include(String.raw`X-Quote:"a\",b"`);
+        expect(output).to.include(String.raw`X-Backslash:"c\\d"`);
+        expect(proxy.sni).to.equal('sni.example.com');
     });
 
     it('filters root proxy headers for unsupported text targets with an error log', function () {

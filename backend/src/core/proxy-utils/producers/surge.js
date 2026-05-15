@@ -887,7 +887,7 @@ function socks5(proxy) {
 function appendHeaders(result, proxy) {
     const value = formatHeaders(proxy.headers);
     if (isNotBlank(value)) {
-        result.append(`,headers=${value}`);
+        result.append(`,headers="${value}"`);
     }
 }
 
@@ -898,8 +898,12 @@ function formatHeaders(headers) {
 
     return Object.entries(headers)
         .filter(([key, value]) => isNotBlank(key) && value != null)
-        .map(([key, value]) => `${key}:${value}`)
+        .map(([key, value]) => `${key}:"${escapeHeaderValue(value)}"`)
         .join(';');
+}
+
+function escapeHeaderValue(value) {
+    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function snell(proxy) {
