@@ -99,6 +99,16 @@ async function downloadSubscription(req, res) {
     let { name, nezhaIndex } = req.params;
 
     const useMihomoExternal = req.query.target === 'SurgeMac';
+    // 仅在 useMihomoExternal=true 时生效：让全部节点共用一个 mihomo 进程 + 多个 SOCKS5 listener
+    // 等价于在脚本里对每个节点设置 _merge=true，避免每个节点 spawn 一个 mihomo 进程
+    const mihomoMerge =
+        useMihomoExternal &&
+        ['true', '1', ''].includes(String(req.query.mihomoMerge ?? ''));
+    const mihomoMergeName =
+        typeof req.query.mihomoMergeName === 'string' &&
+        req.query.mihomoMergeName.length > 0
+            ? req.query.mihomoMergeName
+            : undefined;
 
     const platform =
         req.query.platform ||
@@ -109,6 +119,13 @@ async function downloadSubscription(req, res) {
     $.info(
         `正在下载订阅：${name}\n请求 User-Agent: ${reqUA}\n请求 target: ${req.query.target}\n实际输出: ${platform}`,
     );
+    if (mihomoMerge) {
+        $.info(
+            `已启用 mihomoMerge：合并所有 Mihomo External 节点到单个进程${
+                mihomoMergeName ? `（名称：${mihomoMergeName}）` : ''
+            }`,
+        );
+    }
     let {
         url,
         ua,
@@ -225,6 +242,8 @@ async function downloadSubscription(req, res) {
                 produceOpts: {
                     'include-unsupported-proxy': includeUnsupportedProxy,
                     useMihomoExternal,
+                    merge: mihomoMerge,
+                    mergeName: mihomoMergeName,
                     prettyYaml,
                 },
                 $options,
@@ -419,6 +438,16 @@ async function downloadCollection(req, res) {
     let { name, nezhaIndex } = req.params;
 
     const useMihomoExternal = req.query.target === 'SurgeMac';
+    // 仅在 useMihomoExternal=true 时生效：让全部节点共用一个 mihomo 进程 + 多个 SOCKS5 listener
+    // 等价于在脚本里对每个节点设置 _merge=true，避免每个节点 spawn 一个 mihomo 进程
+    const mihomoMerge =
+        useMihomoExternal &&
+        ['true', '1', ''].includes(String(req.query.mihomoMerge ?? ''));
+    const mihomoMergeName =
+        typeof req.query.mihomoMergeName === 'string' &&
+        req.query.mihomoMergeName.length > 0
+            ? req.query.mihomoMergeName
+            : undefined;
 
     const platform =
         req.query.platform ||
@@ -432,6 +461,13 @@ async function downloadCollection(req, res) {
     $.info(
         `正在下载组合订阅：${name}\n请求 User-Agent: ${reqUA}\n请求 target: ${req.query.target}\n实际输出: ${platform}`,
     );
+    if (mihomoMerge) {
+        $.info(
+            `已启用 mihomoMerge：合并所有 Mihomo External 节点到单个进程${
+                mihomoMergeName ? `（名称：${mihomoMergeName}）` : ''
+            }`,
+        );
+    }
 
     let {
         ignoreFailedRemoteSub,
@@ -510,6 +546,8 @@ async function downloadCollection(req, res) {
                 produceOpts: {
                     'include-unsupported-proxy': includeUnsupportedProxy,
                     useMihomoExternal,
+                    merge: mihomoMerge,
+                    mergeName: mihomoMergeName,
                     prettyYaml,
                 },
                 $options,
