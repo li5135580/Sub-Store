@@ -24,6 +24,22 @@ function buildEmptyNezhaPayload() {
     );
 }
 
+function getMihomoExternalOptions(query) {
+    const useMihomoExternal = query.target === 'SurgeMac';
+    const mihomoExternal = useMihomoExternal ? query.mihomoExternal : undefined;
+    const mihomoMerge = useMihomoExternal ? query.mihomoMerge : undefined;
+    const mihomoMergeName = useMihomoExternal
+        ? query.mihomoMergeName
+        : undefined;
+
+    return {
+        useMihomoExternal,
+        mihomoExternal,
+        mihomoMerge,
+        mihomoMergeName,
+    };
+}
+
 export default function register($app) {
     $app.get('/share/col/:name/:target', async (req, res) => {
         const { target } = req.params;
@@ -98,17 +114,8 @@ export default function register($app) {
 async function downloadSubscription(req, res) {
     let { name, nezhaIndex } = req.params;
 
-    const useMihomoExternal = req.query.target === 'SurgeMac';
-    // 仅在 useMihomoExternal=true 时生效：让全部节点共用一个 mihomo 进程 + 多个 SOCKS5 listener
-    // 等价于在脚本里对每个节点设置 _merge=true，避免每个节点 spawn 一个 mihomo 进程
-    const mihomoMerge =
-        useMihomoExternal &&
-        ['true', '1', ''].includes(String(req.query.mihomoMerge ?? ''));
-    const mihomoMergeName =
-        typeof req.query.mihomoMergeName === 'string' &&
-        req.query.mihomoMergeName.length > 0
-            ? req.query.mihomoMergeName
-            : undefined;
+    const { useMihomoExternal, mihomoMerge, mihomoMergeName, mihomoExternal } =
+        getMihomoExternalOptions(req.query);
 
     const platform =
         req.query.platform ||
@@ -119,13 +126,6 @@ async function downloadSubscription(req, res) {
     $.info(
         `正在下载订阅：${name}\n请求 User-Agent: ${reqUA}\n请求 target: ${req.query.target}\n实际输出: ${platform}`,
     );
-    if (mihomoMerge) {
-        $.info(
-            `已启用 mihomoMerge：合并所有 Mihomo External 节点到单个进程${
-                mihomoMergeName ? `（名称：${mihomoMergeName}）` : ''
-            }`,
-        );
-    }
     let {
         url,
         ua,
@@ -203,9 +203,18 @@ async function downloadSubscription(req, res) {
     if (prettyYaml) {
         $.info(`指定输出易读 YAML: ${prettyYaml}`);
     }
+    if (mihomoMerge) {
+        $.info(`指定合并 Mihomo External: ${mihomoMerge}`);
+    }
+    if (mihomoMergeName) {
+        $.info(`指定合并 Mihomo External 名称: ${mihomoMergeName}`);
+    }
 
     if (useMihomoExternal) {
         $.info(`手动指定了 target 为 SurgeMac, 将使用 Mihomo External`);
+    }
+    if (mihomoExternal) {
+        $.info(`手动指定了 Mihomo External 链接参数: ${mihomoExternal}`);
     }
 
     if (noCache) {
@@ -244,6 +253,7 @@ async function downloadSubscription(req, res) {
                     useMihomoExternal,
                     merge: mihomoMerge,
                     mergeName: mihomoMergeName,
+                    mihomoExternal,
                     prettyYaml,
                 },
                 $options,
@@ -437,17 +447,8 @@ async function downloadSubscription(req, res) {
 async function downloadCollection(req, res) {
     let { name, nezhaIndex } = req.params;
 
-    const useMihomoExternal = req.query.target === 'SurgeMac';
-    // 仅在 useMihomoExternal=true 时生效：让全部节点共用一个 mihomo 进程 + 多个 SOCKS5 listener
-    // 等价于在脚本里对每个节点设置 _merge=true，避免每个节点 spawn 一个 mihomo 进程
-    const mihomoMerge =
-        useMihomoExternal &&
-        ['true', '1', ''].includes(String(req.query.mihomoMerge ?? ''));
-    const mihomoMergeName =
-        typeof req.query.mihomoMergeName === 'string' &&
-        req.query.mihomoMergeName.length > 0
-            ? req.query.mihomoMergeName
-            : undefined;
+    const { useMihomoExternal, mihomoMerge, mihomoMergeName, mihomoExternal } =
+        getMihomoExternalOptions(req.query);
 
     const platform =
         req.query.platform ||
@@ -461,14 +462,6 @@ async function downloadCollection(req, res) {
     $.info(
         `正在下载组合订阅：${name}\n请求 User-Agent: ${reqUA}\n请求 target: ${req.query.target}\n实际输出: ${platform}`,
     );
-    if (mihomoMerge) {
-        $.info(
-            `已启用 mihomoMerge：合并所有 Mihomo External 节点到单个进程${
-                mihomoMergeName ? `（名称：${mihomoMergeName}）` : ''
-            }`,
-        );
-    }
-
     let {
         ignoreFailedRemoteSub,
         produceType,
@@ -527,9 +520,18 @@ async function downloadCollection(req, res) {
     if (prettyYaml) {
         $.info(`指定输出易读 YAML: ${prettyYaml}`);
     }
+    if (mihomoMerge) {
+        $.info(`指定合并 Mihomo External: ${mihomoMerge}`);
+    }
+    if (mihomoMergeName) {
+        $.info(`指定合并 Mihomo External 名称: ${mihomoMergeName}`);
+    }
 
     if (useMihomoExternal) {
         $.info(`手动指定了 target 为 SurgeMac, 将使用 Mihomo External`);
+    }
+    if (mihomoExternal) {
+        $.info(`手动指定了 Mihomo External 链接参数: ${mihomoExternal}`);
     }
     if (noCache) {
         $.info(`指定不使用缓存: ${noCache}`);
@@ -548,6 +550,7 @@ async function downloadCollection(req, res) {
                     useMihomoExternal,
                     merge: mihomoMerge,
                     mergeName: mihomoMergeName,
+                    mihomoExternal,
                     prettyYaml,
                 },
                 $options,
