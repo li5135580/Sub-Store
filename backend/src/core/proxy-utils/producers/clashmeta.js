@@ -52,6 +52,19 @@ export default function ClashMeta_Producer() {
         const list = proxies
             .filter((proxy) => {
                 if (opts['include-unsupported-proxy']) return true;
+
+                if (proxy.type === 'h2-connect') {
+                    $.error(
+                        `Mihomo does not support HTTP/2 CONNECT proxy type. Proxy ${proxy.name} has been filtered.`,
+                    );
+                    return false;
+                }
+                if (hasRootHeaders(proxy) && proxy.type === 'trusttunnel') {
+                    $.error(
+                        `Mihomo does not support headers for TrustTunnel proxy ${proxy.name}. Proxy has been filtered.`,
+                    );
+                    return false;
+                }
                 if (!supportsShadowsocksV2rayPluginMode(proxy, ['websocket'])) {
                     return false;
                 } else if (proxy.type === 'snell' && proxy.version >= 4) {
@@ -365,4 +378,12 @@ export default function ClashMeta_Producer() {
         return produceProxyListOutput(list, type, opts);
     };
     return { type, produce };
+}
+
+function hasRootHeaders(proxy) {
+    return (
+        proxy?.headers &&
+        typeof proxy.headers === 'object' &&
+        Object.keys(proxy.headers).length > 0
+    );
 }

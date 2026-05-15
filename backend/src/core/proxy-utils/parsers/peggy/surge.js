@@ -35,9 +35,28 @@ const grammars = String.raw`
             proxy['shadow-tls-version'] = 2;
         }
     }
+    function parseHeaders(headers) {
+        const result = {};
+        headers.split(";").forEach((pair) => {
+            const index = pair.indexOf(":");
+            if (index === -1) return;
+
+            const key = pair.slice(0, index).trim();
+            const value = pair
+                .slice(index + 1)
+                .trim()
+                .replace(/^"(.*?)"$/, "$1")
+                .replace(/^'(.*?)'$/, "$1");
+
+            if (key) {
+                result[key] = value;
+            }
+        });
+        return result;
+    }
 }
 
-start = (anytls/shadowsocks/vmess/trojan/https/http/snell/socks5/socks5_tls/tuic/tuic_v5/wireguard/hysteria2/ssh/trust_tunnel/direct) {
+start = (anytls/shadowsocks/vmess/trojan/h2_connect/https/http/snell/socks5/socks5_tls/tuic/tuic_v5/wireguard/hysteria2/ssh/trust_tunnel/direct) {
     return proxy;
 }
 
@@ -69,12 +88,17 @@ trojan = tag equals "trojan" address (passwordk/ws/ws_path/ws_headers/tls/sni/tl
     handleWebsocket();
     handleShadowTLS();
 }
-https = tag equals "https" address (username password)? (usernamek passwordk)? (sni/tls_fingerprint/tls_verification/ip_version/underlying_proxy/tos/allow_other_interface/interface/test_url/test_udp/test_timeout/hybrid/no_error_alert/fast_open/tfo/shadow_tls_version/shadow_tls_sni/shadow_tls_password/block_quic/others)* {
+https = tag equals "https" address (username password)? (usernamek passwordk)? (headers/sni/tls_fingerprint/tls_verification/ip_version/underlying_proxy/tos/allow_other_interface/interface/test_url/test_udp/test_timeout/hybrid/no_error_alert/fast_open/tfo/shadow_tls_version/shadow_tls_sni/shadow_tls_password/block_quic/others)* {
     proxy.type = "http";
     proxy.tls = true;
     handleShadowTLS();
 }
-http = tag equals "http" address (username password)? (usernamek passwordk)? (ip_version/underlying_proxy/tos/allow_other_interface/interface/test_url/test_udp/test_timeout/hybrid/no_error_alert/fast_open/tfo/shadow_tls_version/shadow_tls_sni/shadow_tls_password/block_quic/others)* {
+h2_connect = tag equals "h2-connect" address (username password)? (usernamek passwordk)? (headers/sni/tls_fingerprint/tls_verification/ip_version/underlying_proxy/tos/allow_other_interface/interface/test_url/test_udp/test_timeout/hybrid/no_error_alert/fast_open/tfo/shadow_tls_version/shadow_tls_sni/shadow_tls_password/block_quic/others)* {
+    proxy.type = "h2-connect";
+    proxy.tls = true;
+    handleShadowTLS();
+}
+http = tag equals "http" address (username password)? (usernamek passwordk)? (headers/ip_version/underlying_proxy/tos/allow_other_interface/interface/test_url/test_udp/test_timeout/hybrid/no_error_alert/fast_open/tfo/shadow_tls_version/shadow_tls_sni/shadow_tls_password/block_quic/others)* {
     proxy.type = "http";
     handleShadowTLS();
 }
@@ -122,7 +146,7 @@ anytls = tag equals "anytls" address (passwordk/reuse/ip_version/underlying_prox
     proxy.type = "anytls";
     proxy.tls = true;
 }
-trust_tunnel = tag equals "trust-tunnel" address (usernamek/passwordk/reuse/ip_version/underlying_proxy/tos/allow_other_interface/interface/test_url/test_udp/test_timeout/hybrid/no_error_alert/tls_fingerprint/tls_verification/sni/fast_open/tfo/block_quic/others)* {
+trust_tunnel = tag equals "trust-tunnel" address (usernamek/passwordk/headers/reuse/ip_version/underlying_proxy/tos/allow_other_interface/interface/test_url/test_udp/test_timeout/hybrid/no_error_alert/tls_fingerprint/tls_verification/sni/fast_open/tfo/block_quic/others)* {
     proxy.type = "trusttunnel";
     proxy.tls = true;
 }
@@ -226,6 +250,7 @@ ws_headers = comma "ws-headers" equals headers:$[^,]+ {
     obfs["ws-headers"] = result;
 }
 ws_path = comma "ws-path" equals path:uri { obfs.path = path.trim().replace(/^"(.*?)"$/, '$1').replace(/^'(.*?)'$/, '$1'); }
+headers = comma "headers" equals headers:$[^,]+ { proxy.headers = parseHeaders(headers); }
 
 obfs = comma "obfs" equals type:("http"/"tls") { obfs.type = type; }
 obfs_host = comma "obfs-host" equals match:[^,]+ { obfs.host = match.join("").replace(/^"(.*)"$/, '$1'); };

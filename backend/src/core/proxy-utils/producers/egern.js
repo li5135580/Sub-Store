@@ -117,6 +117,11 @@ export default function Egern_Producer() {
                             port: proxy.port,
                             username: proxy.username,
                             password: proxy.password,
+                            ...(hasHeaders(proxy)
+                                ? {
+                                      headers: proxy.headers,
+                                  }
+                                : {}),
                             tfo: proxy.tfo || proxy['fast-open'],
                             next_hop: proxy.next_hop,
                             ...(proxy.tls
@@ -589,4 +594,12 @@ export default function Egern_Producer() {
         return produceProxyListOutput(list, type, opts);
     };
     return { type, produce };
+}
+
+function hasHeaders(proxy) {
+    return (
+        proxy?.headers &&
+        typeof proxy.headers === 'object' &&
+        Object.keys(proxy.headers).length > 0
+    );
 }

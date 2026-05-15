@@ -2859,7 +2859,7 @@ describe('Platform raw-format parser coverage', function () {
             },
             {
                 title: 'parses trust-tunnel lines',
-                input: 'Surge TrustTunnel = trust-tunnel,surge-trust.example.com,443,username=user,password=secret,sni=sni.example.com,skip-cert-verify=true,reuse=true',
+                input: 'Surge TrustTunnel = trust-tunnel,surge-trust.example.com,443,username=user,password=secret,headers=X-Client:Surge;X-Token:abc,sni=sni.example.com,skip-cert-verify=true,reuse=true',
                 expected: {
                     type: 'trusttunnel',
                     name: 'Surge TrustTunnel',
@@ -2868,9 +2868,29 @@ describe('Platform raw-format parser coverage', function () {
                     username: 'user',
                     password: 'secret',
                     tls: true,
+                    headers: {
+                        'X-Client': 'Surge',
+                        'X-Token': 'abc',
+                    },
                     sni: 'sni.example.com',
                     'skip-cert-verify': true,
                     reuse: true,
+                },
+            },
+            {
+                title: 'parses h2-connect lines with dynamic headers',
+                input: 'Surge H2 = h2-connect,h2.example.com,443,headers=X-Padding:<random-string(16-32)>,sni=sni.example.com,skip-cert-verify=true',
+                expected: {
+                    type: 'h2-connect',
+                    name: 'Surge H2',
+                    server: 'h2.example.com',
+                    port: 443,
+                    tls: true,
+                    headers: {
+                        'X-Padding': '<random-string(16-32)>',
+                    },
+                    sni: 'sni.example.com',
+                    'skip-cert-verify': true,
                 },
             },
             {
@@ -2951,7 +2971,7 @@ describe('Platform raw-format parser coverage', function () {
             },
             {
                 title: 'parses https auth lines',
-                input: 'Surge HTTPS = https,surge-http.example.com,8443,user,pass,sni=sni.example.com,skip-cert-verify=true',
+                input: 'Surge HTTPS = https,surge-http.example.com,8443,user,pass,headers=X-Token:abc,sni=sni.example.com,skip-cert-verify=true',
                 expected: {
                     type: 'http',
                     name: 'Surge HTTPS',
@@ -2960,6 +2980,9 @@ describe('Platform raw-format parser coverage', function () {
                     username: 'user',
                     password: 'pass',
                     tls: true,
+                    headers: {
+                        'X-Token': 'abc',
+                    },
                     sni: 'sni.example.com',
                     'skip-cert-verify': true,
                 },

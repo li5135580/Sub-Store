@@ -19,6 +19,18 @@ function captureWarns(fn) {
     }
 }
 
+function captureErrors(fn) {
+    const originalError = $.error;
+    const errors = [];
+    $.error = (message) => errors.push(message);
+    try {
+        const result = fn();
+        return { result, errors };
+    } finally {
+        $.error = originalError;
+    }
+}
+
 describe('Proxy text producers', function () {
     it('produces Quantumult X shadowsocks over-tls lines from canonical tls nodes', function () {
         const output = produceExternal('QX', {
@@ -439,6 +451,122 @@ describe('Proxy text producers', function () {
         expect(output).to.equal(
             `Surge TUIC=tuic-v5,tuic.example.com,443,uuid=${UUID},password="secret",alpn=h3,port-hopping="9000;9002-9004",sni="sni.example.com",skip-cert-verify=true,ecn=true`,
         );
+    });
+
+    it('produces Surge root headers for HTTP, HTTPS, HTTP/2 CONNECT, and TrustTunnel', function () {
+        const output = ProxyUtils.produce(
+            [
+                {
+                    type: 'http',
+                    name: 'Surge HTTP Headers',
+                    server: 'http.example.com',
+                    port: 8080,
+                    username: 'user',
+                    password: 'pass',
+                    headers: {
+                        'X-Client': 'Surge',
+                        'X-Token': 'abc',
+                    },
+                },
+                {
+                    type: 'http',
+                    name: 'Surge HTTPS Headers',
+                    server: 'https.example.com',
+                    port: 443,
+                    tls: true,
+                    sni: 'sni.example.com',
+                    headers: {
+                        'X-Padding': '<random-string(16)>',
+                    },
+                },
+                {
+                    type: 'h2-connect',
+                    name: 'Surge H2 Headers',
+                    server: 'h2.example.com',
+                    port: 443,
+                    tls: true,
+                    sni: 'sni.example.com',
+                    headers: {
+                        'X-Padding': '<random-string(16-32)>',
+                    },
+                },
+                {
+                    type: 'trusttunnel',
+                    name: 'Surge Trust Headers',
+                    server: 'trust.example.com',
+                    port: 443,
+                    username: 'user',
+                    password: 'pass',
+                    headers: {
+                        'X-Client': 'Surge',
+                    },
+                    sni: 'sni.example.com',
+                },
+            ],
+            'Surge',
+            'external',
+        );
+
+        expect(output.split('\n')).to.deep.equal([
+            'Surge HTTP Headers=http,http.example.com,8080,username="user",password="pass",headers=X-Client:Surge;X-Token:abc',
+            'Surge HTTPS Headers=https,https.example.com,443,headers=X-Padding:<random-string(16)>,sni="sni.example.com"',
+            'Surge H2 Headers=h2-connect,h2.example.com,443,headers=X-Padding:<random-string(16-32)>,sni="sni.example.com"',
+            'Surge Trust Headers=trust-tunnel,trust.example.com,443,username="user",password="pass",headers=X-Client:Surge,sni="sni.example.com"',
+        ]);
+    });
+
+    it('filters root proxy headers for unsupported text targets with an error log', function () {
+        const { result, errors } = captureErrors(() =>
+            ProxyUtils.produce(
+                [
+                    {
+                        type: 'http',
+                        name: 'QX HTTPS Headers',
+                        server: 'https.example.com',
+                        port: 443,
+                        tls: true,
+                        headers: {
+                            'X-Token': 'abc',
+                        },
+                    },
+                ],
+                'QX',
+                'external',
+            ),
+        );
+
+        expect(result).to.equal('');
+        expect(errors).to.have.length(1);
+        expect(errors[0]).to.include(
+            'Target platform QX does not support headers for HTTPS proxy QX HTTPS Headers',
+        );
+    });
+
+    it('keeps root proxy headers for unsupported text targets when include-unsupported-proxy is enabled', function () {
+        const { result, errors } = captureErrors(() =>
+            ProxyUtils.produce(
+                [
+                    {
+                        type: 'http',
+                        name: 'QX HTTPS Headers',
+                        server: 'https.example.com',
+                        port: 443,
+                        tls: true,
+                        headers: {
+                            'X-Token': 'abc',
+                        },
+                    },
+                ],
+                'QX',
+                'external',
+                { 'include-unsupported-proxy': true },
+            ),
+        );
+
+        expect(result).to.equal(
+            'http=https.example.com:443,over-tls=true,tag=QX HTTPS Headers',
+        );
+        expect(errors).to.have.length(0);
     });
 
     it('produces Loon WireGuard lines without leaking CIDR metadata fields', function () {

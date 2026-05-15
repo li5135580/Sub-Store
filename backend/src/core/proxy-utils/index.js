@@ -265,15 +265,33 @@ function produce(proxies, targetPlatform, type, opts = {}) {
 
     // filter unsupported proxies
     proxies = proxies.filter((proxy) => {
+        const includeUnsupportedProxy = opts['include-unsupported-proxy'];
+
         // 检查代理是否支持目标平台
-        if (proxy.supported && proxy.supported[targetPlatform] === false) {
+        if (
+            !includeUnsupportedProxy &&
+            proxy.supported &&
+            proxy.supported[targetPlatform] === false
+        ) {
             return false;
         }
 
         if (
+            !includeUnsupportedProxy &&
+            hasRootProxyHeaders(proxy) &&
+            isRootHeaderSensitiveProxy(proxy) &&
+            !supportsRootProxyHeaders(proxy, targetPlatform)
+        ) {
+            $.error(
+                `Target platform ${targetPlatform} does not support headers for ${getRootHeaderProxyLabel(proxy)} proxy ${proxy.name || `${proxy.server}:${proxy.port}`}. Proxy has been filtered.`,
+            );
+            return false;
+        }
+
+        if (
+            !includeUnsupportedProxy &&
             isShadowsocksOverTls(proxy) &&
-            !supportedShadowsocksOverTlsTargets.has(normalizedTarget) &&
-            !opts['include-unsupported-proxy']
+            !supportedShadowsocksOverTlsTargets.has(normalizedTarget)
         ) {
             return false;
         }
@@ -437,6 +455,64 @@ ${list}`;
     } else if (producer.type === 'ALL') {
         return producer.produce(proxies, type, opts);
     }
+}
+
+function hasRootProxyHeaders(proxy) {
+    return (
+        proxy?.headers &&
+        typeof proxy.headers === 'object' &&
+        Object.keys(proxy.headers).length > 0
+    );
+}
+
+function isRootHeaderSensitiveProxy(proxy) {
+    return ['http', 'h2-connect', 'trusttunnel'].includes(proxy?.type);
+}
+
+function supportsRootProxyHeaders(proxy, targetPlatform) {
+    const normalizedTarget = `${targetPlatform}`.toLowerCase();
+
+    if (normalizedTarget.startsWith('surge')) {
+        return ['http', 'h2-connect', 'trusttunnel'].includes(proxy.type);
+    }
+
+    if (normalizedTarget === 'egern') {
+        return proxy.type === 'http';
+    }
+
+    if (
+        ['clashmeta', 'clash.meta', 'meta', 'mihomo'].includes(
+            normalizedTarget,
+        )
+    ) {
+        return proxy.type === 'http';
+    }
+
+    if (['singbox', 'sing-box'].includes(normalizedTarget)) {
+        return proxy.type === 'http';
+    }
+
+    if (normalizedTarget === 'json') {
+        return ['http', 'h2-connect', 'trusttunnel'].includes(proxy.type);
+    }
+
+    return false;
+}
+
+function getRootHeaderProxyLabel(proxy) {
+    if (proxy.type === 'http') {
+        return proxy.tls ? 'HTTPS' : 'HTTP';
+    }
+
+    if (proxy.type === 'h2-connect') {
+        return 'HTTP/2 CONNECT';
+    }
+
+    if (proxy.type === 'trusttunnel') {
+        return 'TrustTunnel';
+    }
+
+    return proxy.type;
 }
 
 export const ProxyUtils = {
@@ -609,6 +685,7 @@ function lastParse(proxy) {
             'juicity',
             'anytls',
             'trusttunnel',
+            'h2-connect',
             'naive',
         ].includes(proxy.type)
     ) {

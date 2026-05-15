@@ -2387,6 +2387,7 @@ function Clash_All() {
                 'openvpn',
                 'tailscale',
                 'trusttunnel',
+                'h2-connect',
                 'naive',
                 'anytls',
                 'mieru',
@@ -2747,6 +2748,14 @@ function Surge_TrustTunnel() {
     const parse = (line) => getSurgeParser().parse(line);
     return { name, test, parse };
 }
+function Surge_H2Connect() {
+    const name = 'Surge HTTP/2 CONNECT Parser';
+    const test = (line) => {
+        return /^.*=\s*h2-connect/.test(line.split(',')[0]);
+    };
+    const parse = (line) => getSurgeParser().parse(line);
+    return { name, test, parse };
+}
 function Surge_SSH() {
     const name = 'Surge SSH Parser';
     const test = (line) => {
@@ -2951,6 +2960,7 @@ export default [
     Surge_Direct(),
     Surge_AnyTLS(),
     Surge_TrustTunnel(),
+    Surge_H2Connect(),
     Surge_SSH(),
     Surge_SS(),
     Surge_VMess(),
